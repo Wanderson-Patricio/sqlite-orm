@@ -1,0 +1,1 @@
+# SQLITE ORM - Um Wrapper para utilização simplificada do sqlite3
