@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
 class Field(ABC):
+    """
+    Base class for all field types in the ORM.
+    """
+
     def __init__(self,
                  *,
                  type: str, 

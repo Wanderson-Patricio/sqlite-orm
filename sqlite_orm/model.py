@@ -45,6 +45,8 @@ class HasAllNonNullableFieldsVericator:
 
 
 class Model(metaclass=ModelMeta):
+    """Base class for all models."""
+    
     def __init__(self, **kwargs):
         HasAllNonNullableFieldsVericator(self).verifiy(kwargs)
 
