@@ -1,5 +1,6 @@
 from typing import Any, List
 class QueryFilter:
+    """Base class for all query filters."""
     def __init__(self, query_symbol: str, value: Any):
         self.query_symbol = query_symbol
         self.value = value
@@ -12,6 +13,7 @@ class QueryFilter:
 
 
 class AND(QueryFilter):
+    """Represents an AND logical operator in a query filter."""
     def __init__(self, *nested_filters: 'QueryFilter', **field_filters: QueryFilter):
         super().__init__('AND', None)
         self.nested_filters = nested_filters
@@ -39,6 +41,7 @@ class AND(QueryFilter):
 
 
 class OR(QueryFilter):
+    """Represents an OR logical operator in a query filter."""
     def __init__(self, *nested_filters: 'QueryFilter', **field_filters: QueryFilter):
         super().__init__('OR', None)
         self.nested_filters = nested_filters

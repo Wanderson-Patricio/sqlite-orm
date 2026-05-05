@@ -8,6 +8,10 @@ from .errors import (
 from .clauses import ClauseGenerator
 
 class BuilderFactory(ABC):
+    """Abstract base class for all query builders.
+    Each specific query builder (SELECT, INSERT, UPDATE, DELETE, CREATE_TABLE, DROP_TABLE) will
+    inherit from this class and implement the build() method to generate the appropriate
+    SQL query string based on the session's options."""
     def __init__(self, session):
         self.session = session
 
@@ -111,6 +115,8 @@ class DropTableQueryBuilder(BuilderFactory):
 
 
 class QueryBuilder(BuilderFactory):
+    """Factory class that selects the appropriate query builder 
+    based on the session's options and delegates the build() call to it."""
     def build(self) -> str:
         builder_map = {
             "SELECT": SelectQueryBuilder,

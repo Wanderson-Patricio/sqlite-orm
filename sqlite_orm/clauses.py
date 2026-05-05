@@ -13,6 +13,7 @@ class QueryClauses:
 
 
 class FilterClauseGenerator:
+    """Generates the WHERE clause from a list of QueryFilter objects."""
     @staticmethod
     def generate(filters: List[QueryFilter]) -> str:
         clauses = []
@@ -23,6 +24,7 @@ class FilterClauseGenerator:
     
 
 class ClauseGenerator:
+    """Generates the full SQL clause (WHERE, ORDER BY, LIMIT, OFFSET) from a QueryClauses object."""
     @staticmethod
     def generate(clauses: QueryClauses) -> str:
         parts = []

@@ -2,6 +2,7 @@ from .query_builder import QueryBuilder
 from .errors import InvalidMethodAssociationException
 
 class QueryDebugger:
+    """Utility class for logging SQL queries with parameters for debugging purposes."""
     def __init__(self):
         import logging
         
@@ -26,6 +27,7 @@ class QueryDebugger:
 
 
 class ResultMapper:
+    """Maps raw database rows to model instances based on the model's field definitions."""
     def __init__(self, model):
         self.model = model
         self.fields = list(model._fields.keys())
@@ -45,6 +47,7 @@ class ResultMapper:
 
 
 class SelectResultHandler:
+    """Handles the results of a SELECT query, mapping them to model instances if required."""
     def __init__(self, cursor, options, model=None):
         self.cursor = cursor
         self.options = options
@@ -72,12 +75,15 @@ class SelectResultHandler:
     
 
 class QueryExecutor:
+    """Executes SQL queries using the provided connection and query builder."""
     def __init__(self, conn, query_builder: QueryBuilder):
         self.conn = conn
         self.query_builder = query_builder
         self.options = query_builder.session.options
 
     def execute(self):
+        """Builds the SQL query using the query builder, executes it, 
+        and handles the results based on the session's options."""
         query = self.query_builder.build()
         parameters = tuple(self.options.parameters)
 
@@ -102,6 +108,7 @@ class QueryExecutor:
         return cursor.rowcount
 
     def _execute_query(self, query, parameters):
+        """Executes the given SQL query with parameters and returns the cursor."""
         try:
             cursor = self.conn.cursor()
             cursor.execute(query, parameters)
