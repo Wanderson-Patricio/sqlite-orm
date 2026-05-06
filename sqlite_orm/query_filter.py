@@ -1,15 +1,31 @@
 from typing import Any, List
+
+
 class QueryFilter:
-    """Base class for all query filters."""
+    """
+    Base class for all query filters.
+
+    Responsibilities:
+        - Define the interface for generating SQL query clauses.
+        - Provide methods to retrieve filter values.
+
+    Attributes:
+        query_symbol (str): The SQL operator or symbol for the filter (e.g., '=', '!=', 'LIKE').
+        value (Any): The value associated with the filter.
+
+    Methods:
+        generate_clause() -> str:
+            Generates the SQL clause for the filter.
+        get_values() -> List[Any]:
+            Retrieves the values associated with the filter.
+
+    Raises:
+        NotImplementedError: If the generate_clause or get_values methods are not implemented in a subclass.
+    """
     def __init__(self, query_symbol: str, value: Any):
         self.query_symbol = query_symbol
         self.value = value
 
-    def generate_clause(self) -> str:
-        raise NotImplementedError("Subclasses must implement generate_clause.")
-
-    def get_values(self) -> List[Any]:
-        raise NotImplementedError("Subclasses must implement get_values.")
 
 
 class AND(QueryFilter):

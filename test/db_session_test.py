@@ -2,11 +2,10 @@ import os
 
 import pytest
 
-from sqlite_orm.model import Model
 from sqlite_orm.field import String, Integer, ID
 from sqlite_orm.query_filter import Equals
 from sqlite_orm.errors import NotFilteredQueryException, InvalidMethodAssociationException, MethodPrecedenceException
-from sqlite_orm import DatabaseContextManager, DBSession
+from sqlite_orm import DatabaseContextManager, DBSession, Model
 
 class User(Model):
     __tablename__ = 'users'
