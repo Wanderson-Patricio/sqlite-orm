@@ -171,7 +171,7 @@ class DateTime(Field):
 
 
 class Date(Field):
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(type='DATE', **kwargs)
 
     def __validate__(self, value):

@@ -8,10 +8,23 @@ from .errors import (
 from .clauses import ClauseGenerator
 
 class BuilderFactory(ABC):
-    """Abstract base class for all query builders.
-    Each specific query builder (SELECT, INSERT, UPDATE, DELETE, CREATE_TABLE, DROP_TABLE) will
-    inherit from this class and implement the build() method to generate the appropriate
-    SQL query string based on the session's options."""
+    """
+    Abstract base class for all query builders.
+
+    Responsibilities:
+        - Define the interface for building SQL queries.
+        - Serve as a base class for specific query builders.
+
+    Attributes:
+        session: The database session containing query options.
+
+    Methods:
+        build():
+            Abstract method to build the SQL query string.
+
+    Raises:
+        NotImplementedError: If the build method is not implemented in a subclass.
+    """
     def __init__(self, session):
         self.session = session
 
@@ -21,6 +34,19 @@ class BuilderFactory(ABC):
 
 
 class SelectQueryBuilder(BuilderFactory):
+    """
+    Builds SELECT SQL queries based on session options.
+
+    Methods:
+        build() -> str:
+            Constructs the SELECT query string.
+
+    Raises:
+        InvalidMethodAssociationException: If required options are not set for the query.
+
+    Returns:
+        str: The constructed SELECT query string.
+    """
     def build(self):
         options = self.session.options
         if not options.model_attributes:
@@ -33,6 +59,16 @@ class SelectQueryBuilder(BuilderFactory):
 
 
 class InsertQueryBuilder(BuilderFactory):
+    """
+    Builds INSERT SQL queries based on session options.
+
+    Methods:
+        build() -> str:
+            Constructs the INSERT query string.
+
+    Returns:
+        str: The constructed INSERT query string.
+    """
     def build(self) -> str:
         attributes = [
             attr for attr in self.session.options.model_attributes
@@ -49,6 +85,19 @@ class InsertQueryBuilder(BuilderFactory):
     
 
 class UpdateQueryBuilder(BuilderFactory):
+    """
+    Builds UPDATE SQL queries based on session options.
+
+    Methods:
+        build() -> str:
+            Constructs the UPDATE query string.
+
+    Raises:
+        NotFilteredQueryException: If no filters are provided for the query.
+
+    Returns:
+        str: The constructed UPDATE query string.
+    """
     def build(self) -> str:
         options = self.session.options
 
@@ -69,6 +118,19 @@ class UpdateQueryBuilder(BuilderFactory):
     
 
 class DeleteQueryBuilder(BuilderFactory):
+    """
+    Builds DELETE SQL queries based on session options.
+
+    Methods:
+        build() -> str:
+            Constructs the DELETE query string.
+
+    Raises:
+        NotFilteredQueryException: If no filters are provided for the query.
+
+    Returns:
+        str: The constructed DELETE query string.
+    """
     def build(self) -> str:
         options = self.session.options
 
@@ -84,6 +146,16 @@ class DeleteQueryBuilder(BuilderFactory):
 
 
 class CreateTableQueryBuilder(BuilderFactory):
+    """
+    Builds CREATE TABLE SQL queries based on the model's field definitions.
+
+    Methods:
+        build() -> str:
+            Constructs the CREATE TABLE query string.
+
+    Returns:
+        str: The constructed CREATE TABLE query string.
+    """
     def build(self) -> str:
         field_definitions = []
 
@@ -110,13 +182,37 @@ class CreateTableQueryBuilder(BuilderFactory):
     
 
 class DropTableQueryBuilder(BuilderFactory):
+    """
+    Builds DROP TABLE SQL queries.
+
+    Methods:
+        build() -> str:
+            Constructs the DROP TABLE query string.
+
+    Returns:
+        str: The constructed DROP TABLE query string.
+    """
     def build(self) -> str:
         return f"DROP TABLE IF EXISTS {self.session.model.__tablename__};"
 
 
 class QueryBuilder(BuilderFactory):
-    """Factory class that selects the appropriate query builder 
-    based on the session's options and delegates the build() call to it."""
+    """
+    Factory class that selects the appropriate query builder based on the session's options.
+
+    Responsibilities:
+        - Delegate the query building process to the appropriate builder class.
+
+    Methods:
+        build() -> str:
+            Constructs the SQL query string using the appropriate builder.
+
+    Raises:
+        ValueError: If the query method is unsupported.
+
+    Returns:
+        str: The constructed SQL query string.
+    """
     def build(self) -> str:
         builder_map = {
             "SELECT": SelectQueryBuilder,

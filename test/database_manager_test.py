@@ -6,12 +6,12 @@ database_name = "test.db3"
 
 def test_database_creation():
     assert not os.path.exists(database_name)
-    with DatabaseContextManager(database_name) as conn:
+    with DatabaseContextManager(database_name) as db:
         assert os.path.exists(database_name)
 
 def test_database_connection():
-    with DatabaseContextManager(database_name) as conn:
-        assert conn is not None
+    with DatabaseContextManager(database_name) as db:
+        assert db is not None
 
 def test_database_cleanup():
     if os.path.exists(database_name):

@@ -16,6 +16,27 @@ from .query_executor import QueryExecutor
 
 @dataclass
 class SessionOptions:
+    """
+    Represents the configuration options for a database session.
+
+    Attributes:
+        model_attributes (List[str]): List of model attributes to include in queries.
+        filters (List[QueryFilter]): List of filters to apply to the query.
+        order_by (Optional[str]): Column to order the results by.
+        limit (Optional[int]): Maximum number of rows to return.
+        offset (Optional[int]): Number of rows to skip before returning results.
+        method (Optional[str]): The SQL method (e.g., SELECT, INSERT, UPDATE, DELETE).
+        parameters (List): Parameters to bind to the query.
+        get_all (Optional[bool]): Whether to fetch all results or just the first.
+        to_model (Optional[bool]): Whether to map results to model instances.
+        update_set_clauses (List[str]): Fields to update in an UPDATE query.
+        debug (Optional[bool]): Whether to enable debug mode.
+
+    Methods:
+        reset():
+            Resets all session options to their default values.
+    """
+
     model_attributes: List[str]
     # Agora filters é uma lista simples, pois as árvores ficam dentro dos próprios filtros
     filters: List[QueryFilter] = field(default_factory=list) 
@@ -41,10 +62,18 @@ class SessionOptions:
         self.update_set_clauses = []
 
 
-
-
 class Helpers:
-    """Utility class for helper decorators and functions used in DBSession."""
+    """
+    Utility class for helper decorators and functions used in DBSession.
+
+    Methods:
+        only(method: str):
+            Decorator to restrict a method to a specific SQL operation.
+
+    Raises:
+        InvalidMethodAssociationException: If the method is used with an invalid SQL operation.
+    """
+
     @staticmethod
     def only(method: str = 'SELECT'):
         def only_implementation(func: Callable):
@@ -57,9 +86,63 @@ class Helpers:
 
 
 class DBSession:
-    """Represents a database session for a specific model, 
-    allowing the construction and execution of SQL queries 
-    through a fluent interface."""
+    """
+    Represents a database session for a specific model, allowing the construction and execution of SQL queries.
+
+    Responsibilities:
+        - Manage the state and options for SQL queries.
+        - Provide a fluent interface for building and executing queries.
+
+    Attributes:
+        model (Model): The model associated with the session.
+        conn (sqlite3.Connection): The database connection.
+        options (SessionOptions): The configuration options for the session.
+
+    Methods:
+        debug(enable: bool, in_place: bool):
+            Enables or disables debug mode for the session.
+        reset_options():
+            Resets the session's options to their default state.
+        create_table():
+            Sets the session's method to CREATE_TABLE.
+        drop_table():
+            Sets the session's method to DROP_TABLE.
+        select():
+            Sets the session's method to SELECT.
+        insert(model_instance: Model):
+            Sets the session's method to INSERT and prepares parameters.
+        delete():
+            Sets the session's method to DELETE.
+        update():
+            Sets the session's method to UPDATE.
+        set(**kwargs):
+            Sets fields and values for an UPDATE query.
+        where(*filters, **kwargs):
+            Adds filters to the query.
+        order_by(field_name: str):
+            Sets the ORDER BY clause for a SELECT query.
+        limit(limit: int):
+            Sets the LIMIT clause for a SELECT query.
+        offset(offset: int):
+            Sets the OFFSET clause for a SELECT query.
+        all():
+            Indicates that all results should be returned for a SELECT query.
+        first():
+            Indicates that only the first result should be returned for a SELECT query.
+        to_model():
+            Indicates that results should be mapped to model instances.
+        execute():
+            Builds, executes, and handles the SQL query.
+
+    Raises:
+        InvalidMethodAssociationException: If a method is used with an invalid SQL operation.
+        MethodPrecedenceException: If .set() is not called before .where() for UPDATE queries.
+        AttributeError: If an invalid attribute is used in a query.
+        ValueError: If invalid values are provided for LIMIT or OFFSET.
+
+    Returns:
+        Any: The result of the executed query.
+    """
     def __init__(self, model: Model, db: DatabaseContextManager):
         self.model = model
         self.conn = db.connection

@@ -9,7 +9,10 @@ def get_database_connection(db_name: str):
         db_name (str): The name of the SQLite database file.
 
     Returns:
-        connection: A SQLite database connection object.
+        sqlite3.Connection: A SQLite database connection object.
+
+    Raises:
+        sqlite3.Error: If there is an error connecting to the database.
     """
     try:
         return sqlite3.connect(db_name)
@@ -20,6 +23,14 @@ def get_database_connection(db_name: str):
 class DatabaseContextManager:
     """
     A context manager for managing database connections.
+
+    Attributes:
+        db_name (str): The name of the SQLite database file.
+        connection (sqlite3.Connection): The SQLite database connection object.
+
+    Methods:
+        table_exists(table_name: str) -> bool:
+            Checks if a table exists in the database.
     """
     def __init__(self, db_name: str):
         self.db_name = db_name
@@ -40,6 +51,7 @@ class DatabaseContextManager:
 
         Args:
             table_name (str): The name of the table to check.
+
         Returns:
             bool: True if the table exists, False otherwise.
         """
