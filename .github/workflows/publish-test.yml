@@ -1,0 +1,37 @@
+name: Publicar no TestPyPI
+
+on:
+  workflow_dispatch: # Este gatilho cria um botão no GitHub para você rodar o fluxo quando quiser
+
+jobs:
+  testpypi-publish:
+    name: Fazer upload do pacote para o TestPyPI
+    runs-on: ubuntu-latest
+    
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/sqlite_orm # Lembre de ajustar se mudou o nome
+      
+    permissions:
+      id-token: write
+      contents: read
+      
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Configurar o Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Instalar ferramentas de construção
+        run: python -m pip install --upgrade pip build
+
+      - name: Construir os arquivos do pacote
+        run: python -m build
+
+      - name: Publicar no TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/ # É esta linha que direciona pro TestPyPI
