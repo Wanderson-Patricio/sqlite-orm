@@ -12,7 +12,7 @@ jobs:
     
     environment:
       name: pypi
-      url: https://pypi.org/p/sqlite_orm # Lembre de ajustar se você mudou o nome do pacote
+      url: https://pypi.org/p/python_sqlite3_orm # Lembre de ajustar se você mudou o nome do pacote
       
     permissions:
       id-token: write  # Essa linha é essencial para o Trusted Publisher funcionar
