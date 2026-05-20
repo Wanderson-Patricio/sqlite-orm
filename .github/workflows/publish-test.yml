@@ -10,7 +10,7 @@ jobs:
     
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/sqlite_orm # Lembre de ajustar se mudou o nome
+      url: https://test.pypi.org/p/python_sqlite_orm # Lembre de ajustar se mudou o nome
       
     permissions:
       id-token: write
