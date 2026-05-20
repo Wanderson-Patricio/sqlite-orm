@@ -4,6 +4,14 @@
 
 O SQLiteORM é uma biblioteca de mapeamento objeto-relacional (ORM) desenvolvida para facilitar a interação com bancos de dados SQLite. Ele abstrai a complexidade das operações SQL, permitindo que os desenvolvedores trabalhem com objetos Python para realizar operações no banco de dados.
 
+## Instalação
+
+Para instalar o **SQLiteORM** no seu projeto, rode o seguinte comando no terminal:
+
+```bash
+pip install python-sqlite3-orm
+```
+
 ### Componentes Principais
 
 1. **`clauses.py`**:
