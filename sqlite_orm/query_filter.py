@@ -43,8 +43,11 @@ class AND(QueryFilter):
         
         # Adiciona as cláusulas de campo (ex: cpf=Equal(...))
         for key, value in self.field_filters.items():
-            clauses.append(f"{key} {value.query_symbol} ?")
-            
+            if isinstance(value.value, list):
+                placeholders = ", ".join("?" for _ in value.value)
+                clauses.append(f"{key} {value.query_symbol} ({placeholders})")
+            else:
+                clauses.append(f"{key} {value.query_symbol} ?")
         return " AND ".join(clauses)
 
     def get_values(self) -> List[Any]:
@@ -52,7 +55,10 @@ class AND(QueryFilter):
         for filter_node in self.nested_filters:
             values.extend(filter_node.get_values())
         for value in self.field_filters.values():
-            values.append(value.value)
+            if isinstance(value.value, list):
+                values.extend(value.value)
+            else:
+                values.append(value.value)
         return values
 
 
@@ -69,7 +75,11 @@ class OR(QueryFilter):
             clauses.append(f"({filter_node.generate_clause()})")
             
         for key, value in self.field_filters.items():
-            clauses.append(f"{key} {value.query_symbol} ?")
+            if isinstance(value.value, list):
+                placeholders = ", ".join("?" for _ in value.value)
+                clauses.append(f"{key} {value.query_symbol} ({placeholders})")
+            else:
+                clauses.append(f"{key} {value.query_symbol} ?")
             
         return " OR ".join(clauses)
 
@@ -78,7 +88,10 @@ class OR(QueryFilter):
         for filter_node in self.nested_filters:
             values.extend(filter_node.get_values())
         for value in self.field_filters.values():
-            values.append(value.value)
+            if isinstance(value.value, list):
+                values.extend(value.value)
+            else:
+                values.append(value.value)
         return values
 
 
