@@ -1,0 +1,50 @@
+Name: Criar Tag Automaticamente
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  create-tag:
+    name: Criar Tag Baseada no Número de Versão
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write #Permite que a ação crie tags
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Necessário para obter todo o histórico de commits e tags
+
+      - name: Extrair versão do setup.py
+        id: version
+        run: |
+          VERSION=$(grep "version=" setup.py | sed -E "s/.*version='([^']+)'.*/\1/")
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Verificar se a tag já existe
+        id: check_tag
+        run: |
+          TAG=$v${{ steps.version.outputs.version }}
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG já existe. Pulando criação."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag $TAG não existe. Criando tag."
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Criar e fazer push da tag
+        if: steps.check-tag.outputs.exists == 'false'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Avisar se a tag já existe
+        if: steps.check-tag.outputs.exists == 'true'
+        run: echo "⚠️ Tag v${{ steps.version.outputs.version }} já existe. Nenhuma ação realizada."
