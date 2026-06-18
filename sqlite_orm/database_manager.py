@@ -38,7 +38,11 @@ class DatabaseContextManager:
 
 
     def __enter__(self):
+        """Establish a database connection when entering the context.
+        Additionally, we will enable foreign key support for SQLite to ensure that foreign key constraints are enforced.
+        """
         self.connection = get_database_connection(self.db_name)
+        self.connection.execute("PRAGMA foreign_keys = ON;")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

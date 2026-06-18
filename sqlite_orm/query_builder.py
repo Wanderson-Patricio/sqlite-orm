@@ -5,6 +5,7 @@ from .errors import (
     InvalidMethodAssociationException
 )
 
+from .field import ForeignKey
 from .clauses import ClauseGenerator
 
 class BuilderFactory(ABC):
@@ -173,6 +174,16 @@ class CreateTableQueryBuilder(BuilderFactory):
                 definition += " UNIQUE"
 
             field_definitions.append(definition)
+
+        for field_name, field in self.session.model._fields.items():
+            if fk := field.foreign_key:
+                fk_definition = (
+                    f"FOREIGN KEY({field_name}) "
+                    f"REFERENCES {fk.reference_table}({fk.reference_field}) "
+                    f"ON DELETE {fk.on_delete} "
+                    f"ON UPDATE {fk.on_update}"
+                )
+                field_definitions.append(fk_definition)
 
         return (
             f"CREATE TABLE IF NOT EXISTS "

@@ -1,5 +1,5 @@
 from .query_builder import QueryBuilder
-from .errors import InvalidMethodAssociationException
+from .errors import InvalidMethodAssociationException, ExceptionHandler
 
 class QueryDebugger:
     """
@@ -194,7 +194,4 @@ class QueryExecutor:
             cursor.execute(query, parameters)
             return cursor
         except Exception as e:
-            raise ValueError(
-                f"Erro ao executar a consulta: {query} "
-                f"com parâmetros: {parameters}. Detalhes: {e}"
-            )
+            ExceptionHandler.handle_execution_error(query, parameters, e)

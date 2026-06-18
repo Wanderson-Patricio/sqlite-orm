@@ -1,9 +1,10 @@
-from typing import Optional, List, Callable
+from typing import Any, Optional, List, Callable
 from dataclasses import dataclass, field
 
 
 from .model import Model
 from .query_filter import QueryFilter, AND
+from .expression import Expression
 from .database_manager import DatabaseContextManager
 from .errors import (
     InvalidMethodAssociationException,
@@ -21,7 +22,9 @@ class SessionOptions:
 
     Attributes:
         model_attributes (List[str]): List of model attributes to include in queries.
-        filters (List[QueryFilter]): List of filters to apply to the query.
+        filters (List[Any]): List of filter nodes to apply to the query.
+            Supported nodes are objects that implement generate_clause() and
+            get_values(), such as Expression and QueryFilter.
         order_by (Optional[str]): Column to order the results by.
         limit (Optional[int]): Maximum number of rows to return.
         offset (Optional[int]): Number of rows to skip before returning results.
@@ -39,7 +42,7 @@ class SessionOptions:
 
     model_attributes: List[str]
     # Agora filters é uma lista simples, pois as árvores ficam dentro dos próprios filtros
-    filters: List[QueryFilter] = field(default_factory=list) 
+    filters: List[Any] = field(default_factory=list)
     order_by: Optional[str] = None
     limit: Optional[int] = None
     offset: Optional[int] = None
@@ -118,7 +121,8 @@ class DBSession:
         set(**kwargs):
             Sets fields and values for an UPDATE query.
         where(*filters, **kwargs):
-            Adds filters to the query.
+            Adds filters to the query using Expression objects, QueryFilter
+            objects, or keyword equality filters.
         order_by(field_name: str):
             Sets the ORDER BY clause for a SELECT query.
         limit(limit: int):
@@ -210,16 +214,42 @@ class DBSession:
                 self.options.update_set_clauses.append(key)
         return self
 
-    def where(self, *filters: QueryFilter, **kwargs):
-        """Adds filters to the query. For UPDATE queries, .set() must be called before .where()."""
+    def where(self, *filters: Any, **kwargs):
+        """Adds filter nodes to the query.
+
+        Accepted styles:
+                - Expression objects (recommended):
+                    .where(User.id == 1)
+                - Composed expressions:
+                    .where((User.age > 18) & (User.name.like("A%")))
+                - Legacy QueryFilter kwargs:
+                    .where(id=Equals(1))
+                - Keyword equality shortcut:
+                    .where(id=1)
+
+        Notes:
+                - Multiple root filters passed in the same call are combined with
+                    a global AND by the clause generator.
+                - For UPDATE queries, .set() must be called before .where().
+        """
         if self.options.method == "UPDATE" and (not self.options.parameters):
             raise MethodPrecedenceException("When on update method, the setters must be passed before the filters.")
 
-        if kwargs:
-            filters = list(filters)
-            filters.append(AND(**{key: value for key, value in kwargs.items()}))
+        normalized_filters: List[Any] = list(filters)
 
-        for filter_node in filters:
+        if kwargs:
+            for key, value in kwargs.items():
+                if isinstance(value, QueryFilter):
+                    normalized_filters.append(AND(**{key: value}))
+                else:
+                    normalized_filters.append(Expression(key, '=', value))
+
+        for filter_node in normalized_filters:
+            if not hasattr(filter_node, "generate_clause") or not hasattr(filter_node, "get_values"):
+                raise TypeError(
+                    "Filters must be Expression or QueryFilter instances. "
+                    "Examples: .where(User.id == 1) or .where(id=Equals(1))."
+                )
             self.options.filters.append(filter_node)
             self.options.parameters.extend(filter_node.get_values())
 

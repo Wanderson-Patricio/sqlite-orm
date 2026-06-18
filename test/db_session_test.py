@@ -3,7 +3,6 @@ import os
 import pytest
 
 from sqlite_orm.field import String, Integer, ID
-from sqlite_orm.query_filter import Equals
 from sqlite_orm.errors import NotFilteredQueryException, InvalidMethodAssociationException, MethodPrecedenceException
 from sqlite_orm import DatabaseContextManager, DBSession, Model
 
@@ -78,7 +77,7 @@ def test_update_error():
 
         session = DBSession(User, db)
         with pytest.raises(MethodPrecedenceException) as excinfo:
-            session = session.update().where(id=Equals(1))
+            session = session.update().where(User.id == 1)
         
         assert "When on update method, the setters must be passed before the filters." in str(excinfo.value)
 
@@ -99,15 +98,13 @@ def test_update():
         assert session.options.update_set_clauses == ["name"]
         assert session.options.parameters == ["Bob"]
 
-        session = session.where(id=Equals(1))
+        session = session.where(User.id == 1)
         assert len(session.options.filters) == 1
 
-        filters = session.options.filters[0].__dict__.get('field_filters')
-        assert filters is not None
-        assert "id" in filters
-        assert isinstance(filters["id"], Equals)
-        assert filters["id"].query_symbol == "="
-        assert filters["id"].value == 1
+        expression = session.options.filters[0]
+        assert expression.operator == "="
+        assert expression.left == "id"
+        assert expression.right == 1
         assert session.options.parameters == ["Bob", 1]
 
         session.execute()
@@ -118,14 +115,35 @@ def test_update():
 def test_delete():
     with DatabaseContextManager(database_name) as db:
         session = DBSession(User, db)
-        session = session.delete().where(id=Equals(1))
+        session = session.delete().where(User.id == 1)
 
         assert session.options.method == "DELETE"
         assert len(session.options.filters) == 1
 
         session.execute()
-        users = session.select().first().where(id=Equals(1)).execute()
+        users = session.select().first().where(User.id == 1).execute()
         assert users is None
+
+
+def test_select_with_expression_composition():
+    with DatabaseContextManager(database_name) as db:
+        session = DBSession(User, db)
+
+        session.insert(User(name="Alice", age=22)).execute()
+        session.insert(User(name="Bob", age=30)).execute()
+        session.insert(User(name="Carol", age=40)).execute()
+
+        users = (
+            session
+            .select()
+            .all()
+            .where((User.age > 25) & ((User.name == "Bob") | (User.name == "Carol")))
+            .to_model()
+            .execute()
+        )
+
+        assert len(users) == 2
+        assert {u.name for u in users} == {"Bob", "Carol"}
 
 
 def test_drop_table():
