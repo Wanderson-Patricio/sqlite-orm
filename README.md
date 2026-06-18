@@ -198,65 +198,76 @@ pip install python-sqlite3-orm
        print(user.name)
    ```
 
-3. **Query Filters**
-   - Para filtrar dados através de campos específicos, podem ser utilizados ***Query Filters***.
+3. **Filtros no SELECT (recomendado: Expressions)**
 
-   ```python
-   from sqlite_orm.query_filter import *
-   ```
+    A forma recomendada para filtrar é utilizar **Expressions** diretamente nos campos do modelo, com operadores Python. Esse formato é mais legível combinável e simples de manter.
 
-   Os filtros configurados são:
+    ```python
+    users = (
+         session
+         .select()
+         .all()
+         .where((User.age > 18) & (User.name.like("A%")))
+         .to_model()
+         .execute()
+    )
+    ```
 
-   - **Equals**: Verifica se o valor de um campo é igual ao valor especificado.
-     ```python
-     session.where(name = Equals("John"))
-     ```
-   - **NotEquals**: Verifica se o valor de um campo é diferente do valor especificado.
-     ```python
-     session.where(name = NotEquals("John"))
-     ```
-   - **GreaterThan**: Verifica se o valor de um campo é maior que o valor especificado.
-     ```python
-     session.where(age = GreaterThan(18))
-     ```
-   - **GreaterThanOrEqual**: Verifica se o valor de um campo é maior ou igual ao valor especificado.
-     ```python
-     session.where(age = GreaterThanOrEqual(18))
-     ```
-   - **LessThan**: Verifica se o valor de um campo é menor que o valor especificado.
-     ```python
-     session.where(age = LessThan(18))
-     ```
-   - **LessThanOrEqual**: Verifica se o valor de um campo é menor ou igual ao valor especificado.
-     ```python
-     session.where(age = LessThanOrEqual(18))
-     ```
-   - **Like**: Verifica se o valor de um campo corresponde a um padrão especificado (usando curingas como `%`).
-     ```python
-     session.where(name = Like("%John%"))
-     ```
-   - **In**: Verifica se o valor de um campo está contido em uma lista de valores.
-     ```python
-     session.where(id = In([1, 2, 3]))
-     ```
+    Todas as formas de filtro suportadas hoje:
 
-   Também é possível fazer associações de filtros, através da combinação com os *query_filters* **AND** e **OR**.
-   Por exemplo, para filtrar pela expressão:
+    1. **Expression simples (recomendado)**
+    ```python
+    session.select().all().where(User.id == 1).execute()
+    session.select().all().where(User.age >= 18).execute()
+    session.select().all().where(User.name != "John").execute()
+    ```
 
-   ```sql
-   WHERE (name = 'John' AND age < 18) OR (name LIKE '%John%' AND age >= 18)
-   ```
+    2. **Expression composta com operadores lógicos (recomendado)**
+    ```python
+    session.select().all().where((User.age > 18) & (User.name.like("J%"))).execute()
+    session.select().all().where((User.age < 18) | (User.name == "Admin")).execute()
+    session.select().all().where(~(User.name.like("%teste%"))).execute()
+    ```
 
-   será utilizada a combinação:
+    3. **LIKE, IN e NOT IN com Expression (recomendado)**
+    ```python
+    session.select().all().where(User.name.like("%John%")).execute()
+    session.select().all().where(User.id.in_([1, 2, 3])).execute()
+    session.select().all().where(User.id.not_in([4, 5])).execute()
+    ```
 
-   ```python
-   session.where(
-      OR(
-         AND(name = Equals('John'), age = LessThan(18)),
-         AND(name = Like('%John%'), age = GreaterThanOrEqual(18))
-      )
-   )
-   ```
+    4. **Comparações com NULL (recomendado)**
+    ```python
+    session.select().all().where(User.name == None).execute()  # IS NULL
+    session.select().all().where(User.name != None).execute()  # IS NOT NULL
+    ```
+
+    5. **Atalho por kwargs com igualdade**
+    ```python
+    session.select().all().where(id=1).execute()
+    session.select().all().where(name="Alice").execute()
+    ```
+
+    6. **Modo legado com QueryFilter (compatibilidade)**
+    ```python
+    from sqlite_orm.query_filter import Equals, GreaterThan, Like, In, AND, OR
+
+    session.select().all().where(id=Equals(1)).execute()
+    session.select().all().where(age=GreaterThan(18)).execute()
+    session.select().all().where(name=Like("%John%")).execute()
+    session.select().all().where(id=In([1, 2, 3])).execute()
+
+    session.select().all().where(
+         OR(
+             AND(name=Equals("John"), age=GreaterThan(18)),
+             AND(name=Like("%Admin%"), age=GreaterThan(60))
+         )
+    ).execute()
+    ```
+
+    > [!TIP]
+    > Para novos projetos e novas consultas, prefira Expressions.
+    > QueryFilter, AND e OR continuam disponíveis para compatibilidade com código legado.
 
 ## Exemplos de Código
 
@@ -303,7 +314,6 @@ pip install python-sqlite3-orm
 ### Inserindo Dados
 
 ```python
-from sqlite_orm.query_filter import Equals
 from sqlite_orm.model import Model
 from sqlite_orm.field import ID, String
 from sqlite_orm import DatabaseContextManager, DBSession
@@ -313,14 +323,14 @@ class Product(Model):
     name = String(nullable=False)
 
 with DatabaseContextManager("store.db") as db:
-    session = DBSession(User, db)
+      session = DBSession(Product, db)
     product = Product(name="Laptop")
     session.insert(product)
     id = session.execute() # Retorna o id do objeto inserido no banco de dados
 
     product = session.select() \
       .first() \
-      .where(id = Equals(id)) \
+         .where(Product.id == id) \
       .to_model() \
       .execute()
 
@@ -334,7 +344,7 @@ with DatabaseContextManager("store.db") as db:
     session = DBSession(Product, db)
     session.update() \
          .set(name = "Gaming Laptop") \
-         .where(id = Equals(1)) \
+       .where(Product.id == 1) \
          .execute()
 ```
 
@@ -344,6 +354,6 @@ with DatabaseContextManager("store.db") as db:
 with DatabaseContextManager("store.db") as db:
     session = DBSession(Product, db)
     session.delete() \
-         .where(id = Equals(1)) \
+       .where(Product.id == 1) \
          .execute()
 ```

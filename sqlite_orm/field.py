@@ -1,8 +1,22 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Iterable
+
+from .expression import Expression
+
+@dataclass(frozen=True)
+class ForeignKey:
+    reference_table: str
+    reference_field: str
+    on_delete: str = "CASCADE"
+    on_update: str = "SET NULL"
 
 class Field(ABC):
     """
     Base class for all field types in the ORM.
+
+    Besides validation and descriptor behavior, Field overloads comparison
+    operators to build Expression objects that can be passed to DBSession.where.
     """
 
     def __init__(self,
@@ -10,17 +24,19 @@ class Field(ABC):
                  type: str, 
                  primary_key: bool = False, 
                  nullable: bool = True, 
-                 unique: bool = False
+                 unique: bool = False,
+                 foreign_key: ForeignKey = None
                 ) -> None:
         
         self.name = None
         self.__type = type
         self.primary_key = primary_key
+        self.foreign_key = foreign_key
         self.nullable = nullable
         self.unique = unique
 
     def __str__(self):
-        return f"<Field name={self.name} type={self.__type} primary_key={self.primary_key} nullable={self.nullable} unique={self.unique}>"
+        return f"<Field name={self.name} type={self.__type} primary_key={self.primary_key} nullable={self.nullable} unique={self.unique} foreign_key={self.foreign_key}>"
 
     def __repr__(self):
         return str(self)
@@ -44,6 +60,44 @@ class Field(ABC):
     def __validate__(self, value):
         if not self.nullable and value is None:
             raise ValueError(f"Field '{self.name}' cannot be null")
+        return value
+    
+    def __eq__(self, other: Any) -> Expression:
+        """Builds an equality Expression for this field."""
+        return Expression(self.name, '=', other)
+
+    def __ne__(self, other: Any) -> Expression:
+        """Builds an inequality Expression for this field."""
+        return Expression(self.name, '!=', other)
+
+    def __lt__(self, other: Any) -> Expression:
+        """Builds a less-than Expression for this field."""
+        return Expression(self.name, '<', other)
+
+    def __le__(self, other: Any) -> Expression:
+        """Builds a less-than-or-equal Expression for this field."""
+        return Expression(self.name, '<=', other)
+
+    def __gt__(self, other: Any) -> Expression:
+        """Builds a greater-than Expression for this field."""
+        return Expression(self.name, '>', other)
+
+    def __ge__(self, other: Any) -> Expression:
+        """Builds a greater-than-or-equal Expression for this field."""
+        return Expression(self.name, '>=', other)
+
+    def like(self, pattern: str) -> Expression:
+        """Builds a LIKE Expression for this field."""
+        return Expression(self.name, 'LIKE', pattern)
+
+    def in_(self, items: Iterable[Any]) -> Expression:
+        """Builds an IN Expression for this field."""
+        return Expression(self.name, 'IN', list(items))
+
+    def not_in(self, items: Iterable[Any]) -> Expression:
+        """Builds a NOT IN Expression for this field."""
+        return Expression(self.name, 'NOT IN', list(items))
+
 
 
 class Integer(Field):
@@ -51,7 +105,8 @@ class Integer(Field):
         super().__init__(type='INTEGER', **kwargs)
 
     def __validate__(self, value):
-        if not isinstance(value, int):
+        value = super().__validate__(value)
+        if value and not isinstance(value, int):
             raise ValueError(f"Expected an integer for field '{self.name}', got {type(value).__name__}")
         return value
 
@@ -73,7 +128,8 @@ class BigInteger(Integer):
         super().__init__(type='BIGINT', **kwargs)
 
     def __validate__(self, value):
-        if not isinstance(value, int):
+        value = super().__validate__(value)
+        if value and not isinstance(value, int):
             raise ValueError(f"Expected an integer for field '{self.name}', got {type(value).__name__}")
         return value
 
@@ -85,7 +141,8 @@ class Decimal(Field):
         self.scale = scale
 
     def __validate__(self, value):
-        if not isinstance(value, (int, float)):
+        value = super().__validate__(value)
+        if value and not isinstance(value, (int, float)):
             raise ValueError(f"Expected a number for field '{self.name}', got {type(value).__name__}")
 
         # Validação de precisão e escala
@@ -106,7 +163,8 @@ class String(Field):
         self.max_length = max_length
 
     def __validate__(self, value):
-        if not isinstance(value, str):
+        value = super().__validate__(value)
+        if value and not isinstance(value, str):
             raise ValueError(f"Expected a string for field '{self.name}', got {type(value).__name__}")
         if len(value) > self.max_length:
             raise ValueError(f"String length for field '{self.name}' exceeds maximum of {self.max_length}")
@@ -121,7 +179,8 @@ class Boolean(Field):
         super().__init__(type='BOOLEAN', **kwargs)
 
     def __validate__(self, value):
-        if not isinstance(value, bool):
+        value = super().__validate__(value)
+        if value and not isinstance(value, bool):
             raise ValueError(f"Expected a boolean for field '{self.name}', got {type(value).__name__}")
 
 
@@ -130,7 +189,8 @@ class Float(Field):
         super().__init__(type='FLOAT', **kwargs)
 
     def __validate__(self, value):
-        if not isinstance(value, (int, float)):
+        value = super().__validate__(value)
+        if value and not isinstance(value, (int, float)):
             raise ValueError(f"Expected a number for field '{self.name}', got {type(value).__name__}")
 
 class Text(Field):
@@ -138,7 +198,8 @@ class Text(Field):
         super().__init__(type='TEXT', **kwargs)
 
     def __validate__(self, value):
-        if not isinstance(value, str):
+        value = super().__validate__(value)
+        if value and not isinstance(value, str):
             raise ValueError(f"Expected a string for field '{self.name}', got {type(value).__name__}")
 
 
@@ -147,7 +208,8 @@ class Blob(Field):
         super().__init__(type='BLOB', **kwargs)
 
     def __validate__(self, value):
-        if not isinstance(value, (bytes, bytearray)):
+        value = super().__validate__(value)
+        if value and not isinstance(value, (bytes, bytearray)):
             raise ValueError(f"Expected bytes for field '{self.name}', got {type(value).__name__}")
 
 
@@ -156,9 +218,11 @@ class DateTime(Field):
         super().__init__(type='DATETIME', **kwargs)
 
     def __validate__(self, value):
+        value = super().__validate__(value)
+
         from datetime import datetime
 
-        if not isinstance(value, (datetime, str)):
+        if value and not isinstance(value, (datetime, str)):
             raise ValueError(f"Expected a datetime object or string for field '{self.name}', got {type(value).__name__}")
         
         if isinstance(value, str):
@@ -175,8 +239,10 @@ class Date(Field):
         super().__init__(type='DATE', **kwargs)
 
     def __validate__(self, value):
+        value = super().__validate__(value)
+
         from datetime import date
-        if not isinstance(value, (date, str)):
+        if value and not isinstance(value, (date, str)):
             raise ValueError(f"Expected a date object or string for field '{self.name}', got {type(value).__name__}")
 
         if isinstance(value, str):
@@ -192,8 +258,10 @@ class Time(Field):
         super().__init__(type='TIME', **kwargs)
     
     def __validate__(self, value):
+        value = super().__validate__(value)
+
         from datetime import time
-        if not isinstance(value, (time, str)):
+        if value and not isinstance(value, (time, str)):
             raise ValueError(f"Expected a time object or string for field '{self.name}', got {type(value).__name__}")
         
         if isinstance(value, str):

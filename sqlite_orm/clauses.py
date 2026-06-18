@@ -10,7 +10,9 @@ class QueryClauses:
     Represents the clauses of a SQL query.
 
     Attributes:
-        filters (List[QueryFilter]): A list of filters to apply in the WHERE clause.
+        filters (List[QueryFilter]): A list of filter-like nodes to apply in the
+            WHERE clause. Each node must implement generate_clause() and
+            get_values() (for example, QueryFilter or Expression).
         order_by (Optional[str]): The column(s) to order the results by.
         limit (Optional[int]): The maximum number of rows to return.
         offset (Optional[int]): The number of rows to skip before starting to return rows.
@@ -23,14 +25,14 @@ class QueryClauses:
 
 class FilterClauseGenerator:
     """
-    Generates the WHERE clause from a list of QueryFilter objects.
+    Generates the WHERE clause from a list of filter-like objects.
 
     Methods:
         generate(filters: List[QueryFilter]) -> str:
             Generates the WHERE clause as a string.
 
     Raises:
-        NotImplementedError: If the QueryFilter subclass does not implement required methods.
+        AttributeError: If a filter node does not implement generate_clause().
     """
     @staticmethod
     def generate(filters: List[QueryFilter]) -> str:
@@ -49,8 +51,9 @@ class ClauseGenerator:
         generate(clauses: QueryClauses) -> str:
             Generates the full SQL clause as a string.
 
-    Raises:
-        NotImplementedError: If the QueryFilter subclass does not implement required methods.
+    Notes:
+        This generator is agnostic to the concrete filter class and relies on
+        the filter node protocol consumed by FilterClauseGenerator.
     """
     @staticmethod
     def generate(clauses: QueryClauses) -> str:
