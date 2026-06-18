@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 setup(
     name='python_sqlite3_orm',
-    version='1.1.0',
+    version='1.2.0',
     packages=find_packages(include=['sqlite_orm', 'sqlite_orm.*']),
     install_requires=[],
     description='A simple ORM for SQLite databases in Python.',
