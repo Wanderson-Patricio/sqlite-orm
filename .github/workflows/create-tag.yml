@@ -1,4 +1,4 @@
-Name: Criar Tag Automaticamente
+name: Criar Tag Automaticamente
 
 on:
   push:
