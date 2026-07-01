@@ -111,7 +111,7 @@ class Integer(Field):
         return value
 
 
-class ID(Integer):
+class IntegerID(Integer):
     def __init__(self):
         super().__init__(primary_key=True, unique=True)
 

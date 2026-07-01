@@ -1,5 +1,7 @@
 import sqlite3
     
+from .db_session import DBSession
+from .model import Model
 
 def get_database_connection(db_name: str):
     """
@@ -62,3 +64,15 @@ class DatabaseContextManager:
         cursor = self.connection.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
         return cursor.fetchone() is not None
+    
+    def get_session(self, model: Model) -> DBSession:
+        """
+        Get a database session for the specified model.
+
+        Args:
+            model (Model): The model class for which to create a session.
+
+        Returns:
+            DBSession: A database session object.
+        """
+        return DBSession(model, self)

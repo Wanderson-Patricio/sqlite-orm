@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from .model import Model
 from .query_filter import QueryFilter, AND
 from .expression import Expression
-from .database_manager import DatabaseContextManager
 from .errors import (
     InvalidMethodAssociationException,
     MethodPrecedenceException
@@ -147,7 +146,7 @@ class DBSession:
     Returns:
         Any: The result of the executed query.
     """
-    def __init__(self, model: Model, db: DatabaseContextManager):
+    def __init__(self, model: Model, db):
         self.model = model
         self.conn = db.connection
         self.options = SessionOptions(

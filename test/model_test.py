@@ -1,11 +1,11 @@
 import pytest
 
 from sqlite_orm.model import Model
-from sqlite_orm.field import String, Integer, ID
+from sqlite_orm.field import String, Integer, IntegerID
 
 class User(Model):
     __tablename__ = 'users'
-    id = ID()
+    id = IntegerID()
     name = String(max_length=100, nullable=False)
     age = Integer(nullable=False)
 

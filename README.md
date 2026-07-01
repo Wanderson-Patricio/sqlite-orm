@@ -111,7 +111,7 @@ pip install python-sqlite3-orm
    class User(Model):
       __tablename__ = "Users"
 
-      id = ID()
+      id = IntegerID()
       name = String(max_length=100, nullable=False)
       cpf = String(max_length=11, nullable=False, unique=True)
       idade = Integer()
@@ -130,7 +130,7 @@ pip install python-sqlite3-orm
    from sqlite_orm.database_manager import DatabaseContextManager, DBSession
 
    with DatabaseContextManager("example.db") as db:
-       session = DBSession(User, db)
+       session = db.get_session(User)
    ```
 
    caso o desenvolvedor deseje que sejam exibidas as queries que estão sendo executadas, basta usar o método **debug** com o parâmetro ***enable*** definida como ***True***.
@@ -139,12 +139,12 @@ pip install python-sqlite3-orm
    from sqlite_orm.database_manager import DatabaseContextManager, DBSession
 
    with DatabaseContextManager("example.db") as db:
-       session = DBSession(User, db).debug(enable=True)
+       session = db.get_session(User).debug(enable=True)
 
    # Ou
 
    with DatabaseContextManager("example.db") as db:
-       session = DBSession(User, db)
+       session = db.get_session(User)
 
        session.debug(enable=True, in_place=True)
    ```
@@ -159,7 +159,7 @@ pip install python-sqlite3-orm
    from sqlite_orm.database_manager import DatabaseContextManager, DBSession
 
    with DatabaseContextManager("example.db") as db:
-       session = DBSession(User, db)
+       session = db.get_session(User)
 
        session = session.select().all()
    ```
@@ -281,13 +281,13 @@ pip install python-sqlite3-orm
    class User(Model):
       __tablename__ = "Users"
 
-      id = ID()
+      id = IntegerID()
       name = String(max_length=100, nullable=False)
       cpf = String(max_length=11, nullable=False, unique=True)
       idade = Integer()
 
    with DatabaseContextManager("example.db") as db:
-       session = DBSession(User, db)
+       session = db.get_session(User)
        session.create_table().execute()
    ```
 
@@ -301,13 +301,13 @@ pip install python-sqlite3-orm
    class User(Model):
       __tablename__ = "Users"
 
-      id = ID()
+      id = IntegerID()
       name = String(max_length=100, nullable=False)
       cpf = String(max_length=11, nullable=False, unique=True)
       idade = Integer()
 
    with DatabaseContextManager("example.db") as db:
-       session = DBSession(User, db)
+       session = db.get_session(User)
        session.drop_table().execute()
    ```
 
@@ -319,18 +319,18 @@ from sqlite_orm.field import ID, String
 from sqlite_orm import DatabaseContextManager, DBSession
 
 class Product(Model):
-    id = ID()
+    id = IntegerID()
     name = String(nullable=False)
 
 with DatabaseContextManager("store.db") as db:
-      session = DBSession(Product, db)
+    session = db.get_session(Product)
     product = Product(name="Laptop")
     session.insert(product)
     id = session.execute() # Retorna o id do objeto inserido no banco de dados
 
     product = session.select() \
       .first() \
-         .where(Product.id == id) \
+      .where(Product.id == id) \
       .to_model() \
       .execute()
 
@@ -341,19 +341,19 @@ with DatabaseContextManager("store.db") as db:
 
 ```python
 with DatabaseContextManager("store.db") as db:
-    session = DBSession(Product, db)
+    session = db.get_session(Product)
     session.update() \
-         .set(name = "Gaming Laptop") \
-       .where(Product.id == 1) \
-         .execute()
+    .set(name = "Gaming Laptop") \
+    .where(Product.id == 1) \
+    .execute()
 ```
 
 ### Deletando Dados
 
 ```python
 with DatabaseContextManager("store.db") as db:
-    session = DBSession(Product, db)
+    session = db.get_session(Product)
     session.delete() \
-       .where(Product.id == 1) \
-         .execute()
+    .where(Product.id == 1) \
+    .execute()
 ```

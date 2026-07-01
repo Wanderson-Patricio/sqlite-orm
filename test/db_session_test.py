@@ -2,13 +2,13 @@ import os
 
 import pytest
 
-from sqlite_orm.field import String, Integer, ID
+from sqlite_orm.field import String, Integer, IntegerID
 from sqlite_orm.errors import NotFilteredQueryException, InvalidMethodAssociationException, MethodPrecedenceException
 from sqlite_orm import DatabaseContextManager, DBSession, Model
 
 class User(Model):
     __tablename__ = 'users'
-    id = ID()
+    id = IntegerID()
     name = String(max_length=100, nullable=False)
     age = Integer(nullable=False)
 
@@ -17,7 +17,7 @@ database_name = 'test.db3'
 
 def test_create_table():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
         session = session.create_table()
 
         assert session.options.method == "CREATE_TABLE"
@@ -27,7 +27,7 @@ def test_create_table():
 
 def test_select():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
 
         session = session.select()
 
@@ -47,7 +47,7 @@ def test_select():
 
 def test_insert():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
         new_user = User(name="Alice", age=30)
         session = session.insert(new_user)
 
@@ -69,19 +69,19 @@ def test_insert():
 
 def test_update_error():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
         session = session.update().set(name="Bob")
         with pytest.raises(NotFilteredQueryException) as excinfo:
             session.execute()
         assert "UPDATE queries must have at least one filter." in str(excinfo.value)
 
-        session = DBSession(User, db)
+        session = db.get_session(User)
         with pytest.raises(MethodPrecedenceException) as excinfo:
             session = session.update().where(User.id == 1)
         
         assert "When on update method, the setters must be passed before the filters." in str(excinfo.value)
 
-        session = DBSession(User, db)
+        session = db.get_session(User)
         with pytest.raises(InvalidMethodAssociationException) as excinfo:
             session = session.update().limit(1)
 
@@ -89,7 +89,7 @@ def test_update_error():
 
 def test_update():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
 
         session = session.update()
         assert session.options.method == "UPDATE"
@@ -114,7 +114,7 @@ def test_update():
 
 def test_delete():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
         session = session.delete().where(User.id == 1)
 
         assert session.options.method == "DELETE"
@@ -127,7 +127,7 @@ def test_delete():
 
 def test_select_with_expression_composition():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
 
         session.insert(User(name="Alice", age=22)).execute()
         session.insert(User(name="Bob", age=30)).execute()
@@ -148,7 +148,7 @@ def test_select_with_expression_composition():
 
 def test_drop_table():
     with DatabaseContextManager(database_name) as db:
-        session = DBSession(User, db)
+        session = db.get_session(User)
         session = session.drop_table()
 
         assert session.options.method == "DROP_TABLE"
