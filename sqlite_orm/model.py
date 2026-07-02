@@ -1,7 +1,9 @@
 from typing import Dict
+from dataclasses import dataclass
 
 from .field import Field
 from .errors import ValidationError
+
 
 class ModelMeta(type):
     """
@@ -85,54 +87,96 @@ class HasAllNonNullableFieldsVericator:
                 raise ValidationError(f"Field '{field_name}' of '{self.model.__class__.__name__}' cannot be null.")
 
 
+
 class Model(metaclass=ModelMeta):
     """
     Base class for all models.
-
-    This class provides the foundation for defining models with fields and
-    ensures that all required fields are validated during initialization.
-
-    Attributes:
-        _fields (Dict[str, Field]): A dictionary mapping field names to their Field instances.
-        __tablename__ (str): The name of the database table associated with the model.
     """
     def __init__(self, **kwargs):
-        """
-        Initializes a model instance with the given field values.
+        # 1. Verifica se foi passado algum campo que não existe na model
+        for key in kwargs:
+            if key not in self._fields:
+                raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'.")
 
-        Args:
-            **kwargs: Field values to initialize the model.
 
-        Raises:
-            ValidationError: If a non-nullable field is missing a value.
-            AttributeError: If an invalid field is provided.
-        """
+        self.verify(**kwargs)
+
+
+        # 2. Itera sobre TODOS os campos definidos no model (acionando os descritores)
+        for field_name in self._fields:
+            # Pega o valor passado no kwargs, ou None se o usuário não enviou
+            value = kwargs.get(field_name, None)
+            
+            # O setattr aqui é a chave do sucesso! 
+            # Ele vai acionar o __set__ do Field, que chamará o __validate__,
+            # gerando o UUID quando o valor for None.
+            setattr(self, field_name, value)
+
+    def verify(self, **kwargs):
         HasAllNonNullableFieldsVericator(self).verifiy(kwargs)
 
         for key, value in kwargs.items():
             HasAttributeVericator(self, key).verifiy(value)
-            setattr(self, key, value)
 
     def __repr__(self):
-        """
-        Returns a string representation of the model instance.
-
-        Returns:
-            str: A string representation of the model with its field values.
-        """
         field_values = ", ".join(f"{field}: {getattr(self, field)}" for field in self._fields)
         return f"<{self.__class__.__name__} ({field_values})>"
     
     def __eq__(self, other: object) -> bool:
-        """
-        Checks if two model instances are equal based on their field values.
-
-        Args:
-            other (object): The other object to compare.
-
-        Returns:
-            bool: True if the instances are equal, False otherwise.
-        """
         if not isinstance(other, Model):
             return False
         return all(getattr(self, field) == getattr(other, field) for field in self._fields)
+
+
+
+# class Model(metaclass=ModelMeta):
+#     """
+#     Base class for all models.
+
+#     This class provides the foundation for defining models with fields and
+#     ensures that all required fields are validated during initialization.
+
+#     Attributes:
+#         _fields (Dict[str, Field]): A dictionary mapping field names to their Field instances.
+#         __tablename__ (str): The name of the database table associated with the model.
+#     """
+#     def __init__(self, **kwargs):
+#         """
+#         Initializes a model instance with the given field values.
+
+#         Args:
+#             **kwargs: Field values to initialize the model.
+
+#         Raises:
+#             ValidationError: If a non-nullable field is missing a value.
+#             AttributeError: If an invalid field is provided.
+#         """
+#         HasAllNonNullableFieldsVericator(self).verifiy(kwargs)
+
+#         for key, value in kwargs.items():
+#             HasAttributeVericator(self, key).verifiy(value)
+#             setattr(self, key, value)
+
+#     def __repr__(self):
+#         """
+#         Returns a string representation of the model instance.
+
+#         Returns:
+#             str: A string representation of the model with its field values.
+#         """
+#         field_values = ", ".join(f"{field}: {getattr(self, field)}" for field in self._fields)
+#         return f"<{self.__class__.__name__} ({field_values})>"
+    
+#     def __eq__(self, other: object) -> bool:
+#         """
+#         Checks if two model instances are equal based on their field values.
+
+#         Args:
+#             other (object): The other object to compare.
+
+#         Returns:
+#             bool: True if the instances are equal, False otherwise.
+#         """
+#         if not isinstance(other, Model):
+#             return False
+#         return all(getattr(self, field) == getattr(other, field) for field in self._fields)

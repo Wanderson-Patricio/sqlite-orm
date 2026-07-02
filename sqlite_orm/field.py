@@ -118,7 +118,7 @@ class IntegerID(Integer):
     def __validate__(self, value):
         value = super().__validate__(value)
         
-        if value <= 0:
+        if value is not None and value <= 0:
             raise ValueError(f"ID field '{self.name}' must be a positive integer")
         return value
 
@@ -172,6 +172,34 @@ class String(Field):
     
     def __str__(self):
         return super().__str__().removesuffix('>') + f" max_length={self.max_length}>"
+
+
+class UUID(String):
+    def __init__(self, **kwargs):
+        super().__init__(max_length=36, primary_key=True, unique=True, **kwargs)
+
+
+    def validate_uuid_format(self, value: str) -> bool:
+        from uuid import UUID
+        try:
+            UUID(value)
+            return True
+        except ValueError:
+            return False
+
+
+    def __validate__(self, value):
+        from uuid import uuid4
+
+        if value is None:
+            value = str(uuid4())  # Gera um UUID aleatório se nenhum valor for fornecido
+        else:
+            if not self.validate_uuid_format(value):
+                raise ValueError(f"Invalid UUID format for field '{self.name}': {value}")
+
+        value = super().__validate__(value)
+        return value
+
 
 
 class Boolean(Field):
