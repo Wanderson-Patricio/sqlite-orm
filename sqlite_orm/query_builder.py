@@ -8,6 +8,9 @@ from .errors import (
 from .field import ForeignKey
 from .clauses import ClauseGenerator
 
+
+NOT_INSERTABLE_FIELDS = {'IntegerID', 'AutoIncrementID'}
+
 class BuilderFactory(ABC):
     """
     Abstract base class for all query builders.
@@ -56,7 +59,9 @@ class SelectQueryBuilder(BuilderFactory):
             raise InvalidMethodAssociationException("Must specify .all() or .first() before executing a SELECT query.")
         if not options.get_all:
             options.limit = 1
-        return f"SELECT {', '.join(options.model_attributes)} FROM {self.session.model.__tablename__} {ClauseGenerator.generate(options)};"
+
+        attributes = ", ".join([attr.name for attr in options.model_attributes])
+        return f"SELECT {attributes} FROM {self.session.model.__tablename__} {ClauseGenerator.generate(options)};"
 
 
 class InsertQueryBuilder(BuilderFactory):
@@ -71,9 +76,10 @@ class InsertQueryBuilder(BuilderFactory):
         str: The constructed INSERT query string.
     """
     def build(self) -> str:
+    
         attributes = [
-            attr for attr in self.session.options.model_attributes
-            if attr != "id"
+            attr.name for attr in self.session.options.model_attributes
+            if attr.type not in NOT_INSERTABLE_FIELDS
         ]
 
         placeholders = ", ".join(["?"] * len(attributes))

@@ -10,8 +10,22 @@ from .errors import (
     MethodPrecedenceException
 )
 
-from .query_builder import QueryBuilder
+from .query_builder import QueryBuilder, NOT_INSERTABLE_FIELDS
 from .query_executor import QueryExecutor
+
+
+
+@dataclass(frozen=True)
+class ModelAttribute:
+    """
+    Represents a model attribute with its name and type.
+
+    Attributes:
+        name (str): The name of the attribute.
+        type (str): The data type of the attribute.
+    """
+    name: str
+    type: str
 
 
 @dataclass
@@ -39,7 +53,7 @@ class SessionOptions:
             Resets all session options to their default values.
     """
 
-    model_attributes: List[str]
+    model_attributes: List[ModelAttribute] = field(default_factory=list)
     # Agora filters é uma lista simples, pois as árvores ficam dentro dos próprios filtros
     filters: List[Any] = field(default_factory=list)
     order_by: Optional[str] = None
@@ -150,12 +164,22 @@ class DBSession:
         self.model = model
         self.conn = db.connection
         self.options = SessionOptions(
-            model_attributes=list(self.model._fields),
+            model_attributes=list(
+                map(lambda attr: ModelAttribute(name=attr, type=str(type(model._fields[attr]).__name__)), model._fields.keys())
+            ),
             filters=[],
             parameters=[],
             update_set_clauses=[],
             debug=False
         )
+
+    @property
+    def attributes(self) -> List[str]:
+        """Returns a list of attribute names for the model associated with the session."""
+        return [
+            attr.name for attr in self.options.model_attributes
+            if attr.type not in NOT_INSERTABLE_FIELDS
+        ]
 
     def debug(self, enable: bool = True, in_place: bool = False):
         """Enables or disables debug mode for the session, which logs executed SQL queries with parameters."""
@@ -185,10 +209,12 @@ class DBSession:
     def insert(self, model_instance: Model):
         """Sets the session's method to INSERT for building an INSERT query and prepares the parameters."""
         self.options.method = "INSERT"
+
+        
+
         self.options.parameters = [
             getattr(model_instance, attr)
-            for attr in self.options.model_attributes
-            if attr != "id"
+            for attr in self.attributes
         ]
         return self
 
@@ -207,7 +233,7 @@ class DBSession:
         """Sets the fields and values for an UPDATE query. Must be called before .where() for UPDATE queries."""
         if kwargs:
             for key, value in kwargs.items():
-                if key not in self.options.model_attributes:
+                if key not in self.attributes:
                     raise AttributeError(f"Attribute '{key}' is not valid for model '{self.model.__name__}'")
                 self.options.parameters.append(value)
                 self.options.update_set_clauses.append(key)
