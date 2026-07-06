@@ -20,13 +20,14 @@ class Field(ABC):
     """
 
     def __init__(self,
-                 *,
-                 type: str, 
-                 primary_key: bool = False, 
-                 nullable: bool = True, 
-                 unique: bool = False,
-                 foreign_key: ForeignKey = None
-                ) -> None:
+                *,
+                type: str, 
+                primary_key: bool = False, 
+                nullable: bool = True, 
+                unique: bool = False,
+                foreign_key: ForeignKey = None,
+                default: Any = None
+            ) -> None:
         
         self.name = None
         self.__type = type
@@ -34,6 +35,7 @@ class Field(ABC):
         self.foreign_key = foreign_key
         self.nullable = nullable
         self.unique = unique
+        self.default = default
 
     def __str__(self):
         return f"<Field name={self.name} type={self.__type} primary_key={self.primary_key} nullable={self.nullable} unique={self.unique} foreign_key={self.foreign_key}>"
@@ -58,8 +60,14 @@ class Field(ABC):
 
     @abstractmethod
     def __validate__(self, value):
-        if not self.nullable and value is None:
-            raise ValueError(f"Field '{self.name}' cannot be null")
+        if value is None:
+            if self.default is not None:
+                value = self.default() if callable(self.default) else self.default
+                
+            else:
+                if not self.nullable:
+                    raise ValueError(f"Field '{self.name}' cannot be None")
+        
         return value
     
     def __eq__(self, other: Any) -> Expression:
@@ -106,20 +114,8 @@ class Integer(Field):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, int):
+        if value is not None and not isinstance(value, int):
             raise ValueError(f"Expected an integer for field '{self.name}', got {type(value).__name__}")
-        return value
-
-
-class IntegerID(Integer):
-    def __init__(self):
-        super().__init__(primary_key=True, unique=True)
-
-    def __validate__(self, value):
-        value = super().__validate__(value)
-        
-        if value is not None and value <= 0:
-            raise ValueError(f"ID field '{self.name}' must be a positive integer")
         return value
 
 
@@ -129,7 +125,7 @@ class BigInteger(Integer):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, int):
+        if value is not None and not isinstance(value, int):
             raise ValueError(f"Expected an integer for field '{self.name}', got {type(value).__name__}")
         return value
 
@@ -142,7 +138,7 @@ class Decimal(Field):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, (int, float)):
+        if value is not None and not isinstance(value, (int, float)):
             raise ValueError(f"Expected a number for field '{self.name}', got {type(value).__name__}")
 
         # Validação de precisão e escala
@@ -164,7 +160,7 @@ class String(Field):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, str):
+        if value is not None and not isinstance(value, str):
             raise ValueError(f"Expected a string for field '{self.name}', got {type(value).__name__}")
         if len(value) > self.max_length:
             raise ValueError(f"String length for field '{self.name}' exceeds maximum of {self.max_length}")
@@ -172,6 +168,20 @@ class String(Field):
     
     def __str__(self):
         return super().__str__().removesuffix('>') + f" max_length={self.max_length}>"
+
+
+
+class IntegerID(Integer):
+    def __init__(self):
+        super().__init__(primary_key=True, unique=True)
+
+    def __validate__(self, value):
+        value = super().__validate__(value)
+        
+        if value is not None and value <= 0:
+            raise ValueError(f"ID field '{self.name}' must be a positive integer")
+        return value
+
 
 
 class UUID(String):
@@ -208,7 +218,7 @@ class Boolean(Field):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, bool):
+        if value is not None and not isinstance(value, bool):
             raise ValueError(f"Expected a boolean for field '{self.name}', got {type(value).__name__}")
 
 
@@ -218,7 +228,7 @@ class Float(Field):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, (int, float)):
+        if value is not None and not isinstance(value, (int, float)):
             raise ValueError(f"Expected a number for field '{self.name}', got {type(value).__name__}")
 
 class Text(Field):
@@ -227,7 +237,7 @@ class Text(Field):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, str):
+        if value is not None and not isinstance(value, str):
             raise ValueError(f"Expected a string for field '{self.name}', got {type(value).__name__}")
 
 
@@ -237,7 +247,7 @@ class Blob(Field):
 
     def __validate__(self, value):
         value = super().__validate__(value)
-        if value and not isinstance(value, (bytes, bytearray)):
+        if value is not None and not isinstance(value, (bytes, bytearray)):
             raise ValueError(f"Expected bytes for field '{self.name}', got {type(value).__name__}")
 
 
@@ -250,7 +260,7 @@ class DateTime(Field):
 
         from datetime import datetime
 
-        if value and not isinstance(value, (datetime, str)):
+        if value is not None and not isinstance(value, (datetime, str)):
             raise ValueError(f"Expected a datetime object or string for field '{self.name}', got {type(value).__name__}")
         
         if isinstance(value, str):
@@ -270,7 +280,7 @@ class Date(Field):
         value = super().__validate__(value)
 
         from datetime import date
-        if value and not isinstance(value, (date, str)):
+        if value is not None and not isinstance(value, (date, str)):
             raise ValueError(f"Expected a date object or string for field '{self.name}', got {type(value).__name__}")
 
         if isinstance(value, str):
@@ -289,7 +299,7 @@ class Time(Field):
         value = super().__validate__(value)
 
         from datetime import time
-        if value and not isinstance(value, (time, str)):
+        if value is not None and not isinstance(value, (time, str)):
             raise ValueError(f"Expected a time object or string for field '{self.name}', got {type(value).__name__}")
         
         if isinstance(value, str):

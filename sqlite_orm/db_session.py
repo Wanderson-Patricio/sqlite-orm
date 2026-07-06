@@ -54,7 +54,7 @@ class SessionOptions:
     """
 
     model_attributes: List[ModelAttribute] = field(default_factory=list)
-    # Agora filters é uma lista simples, pois as árvores ficam dentro dos próprios filtros
+    selected_fields: List[Any] = field(default_factory=list)
     filters: List[Any] = field(default_factory=list)
     order_by: Optional[str] = None
     limit: Optional[int] = None
@@ -76,6 +76,7 @@ class SessionOptions:
         self.get_all = None
         self.to_model = False
         self.update_set_clauses = []
+        self.selected_fields = []
 
 
 class Helpers:
@@ -201,9 +202,11 @@ class DBSession:
         self.options.method = "DROP_TABLE"
         return self
 
-    def select(self):
+    def select(self, *fields: Any):
         """Sets the session's method to SELECT for building a SELECT query."""
         self.options.method = "SELECT"
+        if fields:
+            self.options.selected_fields = list(fields)
         return self
 
     def insert(self, model_instance: Model):

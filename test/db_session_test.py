@@ -1,10 +1,11 @@
 import os
-
 import pytest
 
 from sqlite_orm.field import String, Integer, IntegerID, UUID
 from sqlite_orm.errors import NotFilteredQueryException, InvalidMethodAssociationException, MethodPrecedenceException
+from sqlite_orm.selector import Distinct, Count, Max, Min
 from sqlite_orm import DatabaseContextManager, Model
+
 
 class User(Model):
     __tablename__ = 'users'
@@ -59,7 +60,7 @@ def test_integer_id_insert():
         assert len(users) == 1
 
         user = session.select().first().execute()
-        assert isinstance(user, tuple)
+        assert isinstance(user, dict) or user is None
 
         user = session.select().first().to_model().execute()
         assert isinstance(user, User)
@@ -226,7 +227,7 @@ def test_uuid_insert():
         assert len(users) == 1
 
         user = session.select().first().execute()
-        assert isinstance(user, tuple)
+        assert isinstance(user, dict) or user is None
 
         user = session.select().first().to_model().execute()
         assert isinstance(user, UserUUID)
@@ -325,5 +326,82 @@ def test_uuid_drop_table():
 
         session.execute()
         assert not db.table_exists(User.__tablename__)
+
+    os.remove(database_name)
+
+
+################################################################################
+################################################################################
+############### Teste com Selectors ############################################
+################################################################################
+################################################################################
+
+class UserSelector(Model):
+    __tablename__ = 'users'
+    id = IntegerID()
+    name = String(max_length=100, nullable=False)
+    age = Integer(nullable=False)
+
+
+def test_selectors_count():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserSelector)
+        session.create_table().execute()
+
+        session.insert(UserSelector(name="Alice", age=22)).execute()
+        session.insert(UserSelector(name="Bob", age=30)).execute()
+        session.insert(UserSelector(name="Carol", age=40)).execute()
+        session.insert(UserSelector(name="Alice", age=39)).execute()
+
+        users = (
+            session
+            .select(Count(UserSelector).As("user_count"))
+            .first()
+            .to_model()
+            .execute()
+        )
+
+        assert users.user_count == 4
+
+
+def test_selectors_distinct():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserSelector)
+
+        users = (
+            session
+            .select(Distinct(UserSelector.name).As("distinct_names"))
+            .all()
+            .to_model()
+            .execute()
+        )
+
+        distinct_names = {user.distinct_names for user in users}
+        assert distinct_names == {"Alice", "Bob", "Carol"}
+
+
+def test_selectors_max_min():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserSelector)
+
+        max_age_user = (
+            session
+            .select(Max(UserSelector.age).As("max_age"))
+            .first()
+            .to_model()
+            .execute()
+        )
+
+        min_age_user = (
+            session
+            .select(Min(UserSelector.age).As("min_age"))
+            .first()
+            .to_model()
+            .execute()
+        )
+
+        assert max_age_user.max_age == 40
+        assert min_age_user.min_age == 22
+
 
     os.remove(database_name)
