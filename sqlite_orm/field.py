@@ -172,8 +172,8 @@ class String(Field):
 
 
 class IntegerID(Integer):
-    def __init__(self):
-        super().__init__(primary_key=True, unique=True)
+    def __init__(self, primary_key: bool = True, unique: bool = True, **kwargs):
+        super().__init__(primary_key=primary_key, unique=unique, **kwargs)
 
     def __validate__(self, value):
         value = super().__validate__(value)
@@ -185,8 +185,8 @@ class IntegerID(Integer):
 
 
 class UUID(String):
-    def __init__(self, **kwargs):
-        super().__init__(max_length=36, primary_key=True, unique=True, **kwargs)
+    def __init__(self, primary_key: bool = True, unique: bool = True, **kwargs):
+        super().__init__(primary_key=primary_key, unique=unique, **kwargs)
 
 
     def validate_uuid_format(self, value: str) -> bool:
