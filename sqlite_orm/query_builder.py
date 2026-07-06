@@ -5,9 +5,8 @@ from .errors import (
     InvalidMethodAssociationException
 )
 
-from .field import ForeignKey
 from .clauses import ClauseGenerator
-
+from .selector import compile_node
 
 NOT_INSERTABLE_FIELDS = {'IntegerID', 'AutoIncrementID'}
 
@@ -60,7 +59,15 @@ class SelectQueryBuilder(BuilderFactory):
         if not options.get_all:
             options.limit = 1
 
-        attributes = ", ".join([attr.name for attr in options.model_attributes])
+        # Lógica de seleção de colunas
+        if options.selected_fields:
+            # Usa os campos especificados com as funções (Count, Distinct, etc)
+            attributes = ", ".join(compile_node(f) for f in options.selected_fields)
+        else:
+            # Comportamento padrão (todas as colunas)
+            if not options.model_attributes:
+                raise InvalidMethodAssociationException("Model must have at least one attribute to build a SELECT query.")
+            attributes = ", ".join([attr.name for attr in options.model_attributes])
         return f"SELECT {attributes} FROM {self.session.model.__tablename__} {ClauseGenerator.generate(options)};"
 
 
@@ -178,6 +185,16 @@ class CreateTableQueryBuilder(BuilderFactory):
                 definition += " NOT NULL"
             if field.unique:
                 definition += " UNIQUE"
+            if field.default is not None:
+                if callable(field.default):
+                    default_value = field.default()
+                else:
+                    default_value = field.default
+
+                if isinstance(default_value, (int, float)):
+                    definition += f" DEFAULT {default_value}"
+                else:
+                    definition += f" DEFAULT '{default_value}'"
 
             field_definitions.append(definition)
 

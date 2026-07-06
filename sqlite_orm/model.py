@@ -99,7 +99,7 @@ class Model(metaclass=ModelMeta):
                 raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'.")
 
 
-        self.verify(**kwargs)
+        # self.verify(**kwargs)
 
 
         # 2. Itera sobre TODOS os campos definidos no model (acionando os descritores)

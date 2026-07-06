@@ -40,38 +40,39 @@ class QueryDebugger:
 
 class ResultMapper:
     """
-    Maps raw database rows to model instances based on the model's field definitions.
-
-    Responsibilities:
-        - Validate the structure of database rows.
-        - Map rows to model instances.
-
-    Attributes:
-        model: The model class to map rows to.
-        fields (list): List of field names in the model.
-
-    Methods:
-        map_row(row):
-            Maps a single database row to a model instance.
-        map_many(rows):
-            Maps multiple database rows to model instances.
-
-    Raises:
-        ValueError: If the number of fields in the model does not match the number of columns in the row.
+    Maps raw database rows to model instances based on the model's field definitions
+    or creates dynamic model classes for custom SELECT projections.
     """
-    def __init__(self, model):
+    def __init__(self, model, column_names, is_dynamic=False):
         self.model = model
-        self.fields = list(model._fields.keys())
+        self.column_names = column_names
+        self.is_dynamic = is_dynamic
+
+        if self.is_dynamic:
+            # Cria uma classe genérica em tempo de execução para comportar colunas customizadas
+            self.target_class = type("DynamicRecord", (), {})
+        else:
+            self.target_class = model
+            self.fields = list(model._fields.keys())
 
     def _validate(self, row):
-        if len(self.fields) != len(row):
+        if not self.is_dynamic and len(self.fields) != len(row):
             raise ValueError(
                 "The number of fields in the model does not match the number of columns returned by the query."
             )
 
     def map_row(self, row):
         self._validate(row)
-        return self.model(**dict(zip(self.fields, row)))
+
+        if self.is_dynamic:
+            # Instancia a classe dinâmica e popula os atributos usando os nomes das colunas
+            instance = self.target_class()
+            for col_name, value in zip(self.column_names, row):
+                setattr(instance, col_name, value)
+            return instance
+        else:
+            # Mapeamento padrão para o modelo original
+            return self.target_class(**dict(zip(self.fields, row)))
 
     def map_many(self, rows):
         return [self.map_row(row) for row in rows]
@@ -79,35 +80,22 @@ class ResultMapper:
 
 class SelectResultHandler:
     """
-    Handles the results of a SELECT query, mapping them to model instances if required.
-
-    Responsibilities:
-        - Determine whether to fetch all or the first result.
-        - Map results to model instances if specified.
-
-    Attributes:
-        cursor: The database cursor with the query results.
-        options: The session options specifying how to handle the results.
-        mapper: The ResultMapper instance for mapping rows to model instances.
-
-    Methods:
-        handle():
-            Handles the query results based on the session options.
-        _handle_all():
-            Fetches and processes all rows from the query results.
-        _handle_first():
-            Fetches and processes the first row from the query results.
-
-    Raises:
-        InvalidMethodAssociationException: If .all() or .first() is not specified before executing the query.
-
-    Returns:
-        list or object: The processed query results.
+    Handles the results of a SELECT query, mapping them to model instances if required,
+    or returning dictionaries for non-model queries.
     """
     def __init__(self, cursor, options, model=None):
         self.cursor = cursor
         self.options = options
-        self.mapper = ResultMapper(model) if options.to_model else None
+        
+        # Extrai os nomes das colunas/aliases do banco de dados
+        self.column_names = [desc[0] for desc in cursor.description] if cursor.description else []
+
+        if options.to_model:
+            # Verifica se há seletores customizados nas opções (se o atributo existir e tiver itens)
+            is_dynamic = bool(getattr(options, 'selected_fields', []))
+            self.mapper = ResultMapper(model, self.column_names, is_dynamic)
+        else:
+            self.mapper = None
 
     def handle(self):
         if self.options.get_all is None:
@@ -119,15 +107,23 @@ class SelectResultHandler:
 
     def _handle_all(self):
         rows = self.cursor.fetchall()
+        
         if self.mapper:
             return self.mapper.map_many(rows)
-        return rows
+            
+        # Se to_model for False, retorna uma lista de dicionários
+        return [dict(zip(self.column_names, row)) for row in rows]
 
     def _handle_first(self):
         row = self.cursor.fetchone()
-        if row and self.mapper:
+        if not row:
+            return None
+            
+        if self.mapper:
             return self.mapper.map_row(row)
-        return row
+            
+        # Se to_model for False, retorna um dicionário único
+        return dict(zip(self.column_names, row))
     
 
 class QueryExecutor:
