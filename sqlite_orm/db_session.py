@@ -1,8 +1,9 @@
 from typing import Any, Optional, List, Callable
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 
 
 from .model import Model
+from .field import Field
 from .query_filter import QueryFilter, AND
 from .expression import Expression
 from .errors import (
@@ -29,6 +30,23 @@ class ModelAttribute:
 
 
 @dataclass
+class OrderOption:
+    """
+    Represents the ordering options for a query.
+
+    Attributes:
+        field (Field): The field name to order by.
+        ascending (bool): Whether to order in ascending
+    """
+    field: InitVar[Field]
+    field_name: str = field(init=False)
+    ascending: bool = True
+
+    def __post_init__(self, field: Field):
+        self.field_name = field.name if hasattr(field, 'name') else str(field)
+
+
+@dataclass
 class SessionOptions:
     """
     Represents the configuration options for a database session.
@@ -47,6 +65,7 @@ class SessionOptions:
         to_model (Optional[bool]): Whether to map results to model instances.
         update_set_clauses (List[str]): Fields to update in an UPDATE query.
         debug (Optional[bool]): Whether to enable debug mode.
+        inserted_model (Optional[Model]): The model instance that was inserted, if applicable.
 
     Methods:
         reset():
@@ -56,7 +75,7 @@ class SessionOptions:
     model_attributes: List[ModelAttribute] = field(default_factory=list)
     selected_fields: List[Any] = field(default_factory=list)
     filters: List[Any] = field(default_factory=list)
-    order_by: Optional[str] = None
+    order_by: Optional[OrderOption] = None
     limit: Optional[int] = None
     offset: Optional[int] = None
     method: Optional[str] = None
@@ -65,6 +84,7 @@ class SessionOptions:
     to_model: Optional[bool] = False
     update_set_clauses: List[str] = field(default_factory=list)
     debug: Optional[bool] = None
+    inserted_model: Optional[Model] = None
 
     def reset(self):
         self.filters = []
@@ -77,7 +97,7 @@ class SessionOptions:
         self.to_model = False
         self.update_set_clauses = []
         self.selected_fields = []
-
+        self.inserted_model = None
 
 class Helpers:
     """
@@ -212,8 +232,7 @@ class DBSession:
     def insert(self, model_instance: Model):
         """Sets the session's method to INSERT for building an INSERT query and prepares the parameters."""
         self.options.method = "INSERT"
-
-        
+        self.options.inserted_model = model_instance
 
         self.options.parameters = [
             getattr(model_instance, attr)
@@ -284,11 +303,12 @@ class DBSession:
         return self
 
     @Helpers.only("SELECT")
-    def order_by(self, field_name: str):
+    def order_by(self, field: Any, ascending: bool = True):
         """Sets the ORDER BY clause for a SELECT query."""
+        field_name = field.name if hasattr(field, 'name') else str(field)
         if field_name not in self.model._fields:
             raise AttributeError(f"Attribute '{field_name}' is not valid for model '{self.model.__name__}'")
-        self.options.order_by = field_name
+        self.options.order_by = OrderOption(field=field, ascending=ascending)
         return self
 
     @Helpers.only("SELECT")

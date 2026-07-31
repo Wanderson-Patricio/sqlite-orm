@@ -1,3 +1,5 @@
+from typing import Union
+
 from .query_builder import QueryBuilder
 from .errors import InvalidMethodAssociationException, ExceptionHandler
 
@@ -179,7 +181,7 @@ class QueryExecutor:
         self.conn.commit()
 
         if self.options.method == "INSERT":
-            return cursor.lastrowid
+            return self._get_inserted_primary_key(cursor)
 
         return cursor.rowcount
 
@@ -191,3 +193,28 @@ class QueryExecutor:
             return cursor
         except Exception as e:
             ExceptionHandler.handle_execution_error(query, parameters, e)
+
+    def _get_inserted_primary_key(self, cursor) -> Union[int, str, tuple, None]:
+        """Returns the inserted model primary key value (UUID, int, etc.) when applicable.
+        
+        Falls back to cursor.lastrowid for DB-generated integer primary keys.
+        """
+
+        model = self.query_builder.session.model
+        inserted_model = self.options.inserted_model
+
+        primary_key_fields = [
+            field_name for field_name, field in model._fields.items()
+            if getattr(field, 'primary_key', False)
+        ]
+
+        if inserted_model and primary_key_fields:
+            pk_values = [getattr(inserted_model, field_name, None) for field_name in primary_key_fields]
+
+            if len(pk_values) == 1 and pk_values[0] is not None:
+                return pk_values[0]  # Retorna o valor do campo PK se houver apenas um
+            
+            if len(pk_values) > 1 and all(value is not None for value in pk_values):
+                return tuple(pk_values)  # Retorna uma tupla de valores PK se houver múltiplos campos PK
+            
+        return cursor.lastrowid  # Retorna lastrowid como fallback para PKs geradas pelo DB

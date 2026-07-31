@@ -405,3 +405,139 @@ def test_selectors_max_min():
 
 
     os.remove(database_name)
+
+
+################################################################################
+################################################################################
+############### Teste com Retorno do método Insert #############################
+################################################################################
+################################################################################
+
+class UserInsertIntegerID(Model):
+    __tablename__ = 'users_id'
+    id = IntegerID()
+    name = String(max_length=100, nullable=False)
+    age = Integer(nullable=False)
+
+
+class UserInsertUUID(Model):
+    __tablename__ = 'users_uuid'
+    id = UUID()
+    name = String(max_length=100, nullable=False)
+    age = Integer(nullable=False)
+
+def test_insert_return_integer_id():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserInsertIntegerID)
+        session.create_table().execute()
+
+        new_user = UserInsertIntegerID(name="Alice", age=30)
+        user_id = session.insert(new_user).execute()
+
+        assert isinstance(user_id, int)
+        assert user_id == 1
+
+
+def test_insert_return_uuid():
+    def is_valid_uuid(uuid_string):
+        return (
+            isinstance(uuid_string, str) and
+            len(uuid_string) == 36 and 
+            uuid_string.count('-') == 4 and 
+            all(c in "0123456789abcdef-" for c in uuid_string.lower())
+        )
+
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserInsertUUID)
+        session.create_table().execute()
+
+        new_user = UserInsertUUID(name="Alice", age=30)
+        user_id = session.insert(new_user).execute()
+
+        assert is_valid_uuid(user_id)
+
+    os.remove(database_name)
+
+
+################################################################################
+################################################################################
+############### Teste com Order_by (ASC e DESC ) ###############################
+################################################################################
+################################################################################
+
+class UserInsertOrdeByIntegerID(Model):
+    __tablename__ = 'users_id'
+    id = IntegerID()
+    name = String(max_length=100, nullable=False)
+    age = Integer(nullable=False)
+
+
+class UserInsertOrdeByUUID(Model):
+    __tablename__ = 'users_uuid'
+    id = UUID()
+    name = String(max_length=100, nullable=False)
+    age = Integer(nullable=False)
+
+
+def test_order_by_integer_id():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserInsertOrdeByIntegerID)
+        session.create_table().execute()
+
+        session.insert(UserInsertOrdeByIntegerID(name="Alice", age=30)).execute()
+        session.insert(UserInsertOrdeByIntegerID(name="Bob", age=25)).execute()
+        session.insert(UserInsertOrdeByIntegerID(name="Charlie", age=35)).execute()
+
+        users_asc = (
+            session
+            .select()
+            .all()
+            .order_by(UserInsertOrdeByIntegerID.age, ascending=True)
+            .to_model()
+            .execute()
+        )
+
+        users_desc = (
+            session
+            .select()
+            .all()
+            .order_by(UserInsertOrdeByIntegerID.age, ascending=False)
+            .to_model()
+            .execute()
+        )
+
+        assert [user.age for user in users_asc] == [25, 30, 35]
+        assert [user.age for user in users_desc] == [35, 30, 25]
+
+
+def test_order_by_uuid():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserInsertOrdeByUUID)
+        session.create_table().execute()
+
+        session.insert(UserInsertOrdeByUUID(name="Alice", age=30)).execute()
+        session.insert(UserInsertOrdeByUUID(name="Bob", age=25)).execute()
+        session.insert(UserInsertOrdeByUUID(name="Charlie", age=35)).execute()
+
+        users_asc = (
+            session
+            .select()
+            .all()
+            .order_by(UserInsertOrdeByUUID.age, ascending=True)
+            .to_model()
+            .execute()
+        )
+
+        users_desc = (
+            session
+            .select()
+            .all()
+            .order_by(UserInsertOrdeByUUID.age, ascending=False)
+            .to_model()
+            .execute()
+        )
+
+        assert [user.age for user in users_asc] == [25, 30, 35]
+        assert [user.age for user in users_desc] == [35, 30, 25]
+
+    os.remove(database_name)

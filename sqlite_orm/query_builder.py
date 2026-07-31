@@ -202,7 +202,7 @@ class CreateTableQueryBuilder(BuilderFactory):
             if fk := field.foreign_key:
                 fk_definition = (
                     f"FOREIGN KEY({field_name}) "
-                    f"REFERENCES {fk.reference_table}({fk.reference_field}) "
+                    f"REFERENCES {fk.reference_table_name}({fk.reference_field_name}) "
                     f"ON DELETE {fk.on_delete} "
                     f"ON UPDATE {fk.on_update}"
                 )

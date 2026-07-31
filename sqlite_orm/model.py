@@ -119,7 +119,12 @@ class Model(metaclass=ModelMeta):
             HasAttributeVericator(self, key).verifiy(value)
 
     def __repr__(self):
-        field_values = ", ".join(f"{field}: {getattr(self, field)}" for field in self._fields)
+        def str_repr(value):
+            if isinstance(value, str):
+                return f"'{value}'"
+            return str(value)
+
+        field_values = ", ".join(f"{field}: {str_repr(getattr(self, field))}" for field in self._fields)
         return f"<{self.__class__.__name__} ({field_values})>"
     
     def __eq__(self, other: object) -> bool:
