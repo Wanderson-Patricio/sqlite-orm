@@ -59,6 +59,8 @@ class ClauseGenerator:
         parts = []
         if clauses.filters:
             parts.append("WHERE " + FilterClauseGenerator.generate(clauses.filters))
+        if clauses.group_by:
+            parts.append(f"GROUP BY {', '.join(clauses.group_by)}")
         if clauses.order_by:
             parts.append(f"ORDER BY {clauses.order_by.field_name} {'ASC' if clauses.order_by.ascending else 'DESC'}")
         if clauses.limit is not None:

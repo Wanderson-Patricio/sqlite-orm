@@ -32,7 +32,12 @@ class ModelMeta(type):
         attrs['__tablename__'] = __tablename__
         attrs['_fields'] = fields
 
-        return super().__new__(mcs, name, bases, attrs)
+        cls = super().__new__(mcs, name, bases, attrs)
+
+        for field in fields.values():
+            field.parent_model = cls
+
+        return cls
 
 class HasAttributeVericator:
     """

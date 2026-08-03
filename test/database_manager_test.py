@@ -5,7 +5,9 @@ from sqlite_orm import DatabaseContextManager
 database_name = "test.db3"
 
 def test_database_creation():
-    assert not os.path.exists(database_name)
+    if os.path.exists(database_name):
+        os.remove(database_name)
+        assert not os.path.exists(database_name)
     with DatabaseContextManager(database_name) as db:
         assert os.path.exists(database_name)
 

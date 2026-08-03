@@ -70,6 +70,8 @@ class Expression:
         """Converts an operand to its SQL textual representation."""
         if isinstance(operand, Expression):
             return f"({operand.generate_clause()})"
+        if hasattr(operand, 'parent_model') and operand.parent_model is not None:
+            return f"{operand.parent_model.__tablename__}.{operand.name}"
         if hasattr(operand, 'name'):
             return str(operand.name)
         return str(operand)
@@ -131,8 +133,23 @@ class Expression:
         if self.operator in {'IN', 'NOT IN'}:
             return list(self.right)
 
+        # Field instances are column references, not bind values
+        if hasattr(self.right, 'parent_model'):
+            return []
+
         return [self.right]
     
+    def generate_join_clause(self) -> str:
+        """Generates a SQL ON clause fragment where both sides are rendered as column references."""
+        if self.operator in {'AND', 'OR'}:
+            left_sql = self.left.generate_join_clause() if isinstance(self.left, Expression) else self._operand_to_sql(self.left)
+            right_sql = self.right.generate_join_clause() if isinstance(self.right, Expression) else self._operand_to_sql(self.right)
+            return f"{left_sql} {self.operator} {right_sql}"
+
+        left_sql = self._operand_to_sql(self.left)
+        right_sql = self._operand_to_sql(self.right)
+        return f"{left_sql} {self.operator} {right_sql}"
+
     def to_sql(self) -> str:
         """Compatibility alias for generate_clause()."""
         return self.generate_clause()

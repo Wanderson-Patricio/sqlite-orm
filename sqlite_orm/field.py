@@ -70,8 +70,20 @@ class Field(ABC):
         self.unique = unique
         self.default = default
 
+        self.parent_model = None  # This will be set when the field is added to a model class
+
     def __str__(self):
-        return f"<Field name={self.name} type={self.__type} primary_key={self.primary_key} nullable={self.nullable} unique={self.unique} foreign_key={self.foreign_key}>"
+        return ("<Field "
+                f"name={self.name} "
+                f"type={self.__type} "
+                f"primary_key={self.primary_key} "
+                f"nullable={self.nullable} "
+                f"unique={self.unique} "
+                f"foreign_key={self.foreign_key}> "
+                f"default={self.default}> "
+                f"parent_model={self.parent_model.__name__ if self.parent_model else '-'}"
+                ">"
+            )
 
     def __repr__(self):
         return str(self)
@@ -102,42 +114,60 @@ class Field(ABC):
                     raise ValueError(f"Field '{self.name}' cannot be None")
         
         return value
+
+    def __left_expression_input(self) -> str:
+        """Returns the SQL representation of this field for use in expressions."""
+        if self.parent_model is None:
+            raise ValueError(f"Field '{self.name}' is not associated with any model.")
+        return f"{self.parent_model.__tablename__}.{self.name}"
+
+    def __right_expression_input(self, value: Any) -> str:
+        """Returns the SQL representation of a value for use in expressions."""
+        if isinstance(value, Field):
+            if value.parent_model is None:
+                raise ValueError(f"Field '{value.name}' is not associated with any model.")
+            return f"{value.parent_model.__tablename__}.{value.name}"
+        return value  # Use parameterized queries for values
+
+    def As(self, alias: str) -> 'Any':
+        from .selector import Alias
+        return Alias(self, alias)
     
     def __eq__(self, other: Any) -> Expression:
         """Builds an equality Expression for this field."""
-        return Expression(self.name, '=', other)
+        return Expression(self.__left_expression_input(), '=', self.__right_expression_input(other))
 
     def __ne__(self, other: Any) -> Expression:
         """Builds an inequality Expression for this field."""
-        return Expression(self.name, '!=', other)
+        return Expression(self.__left_expression_input(), '!=', self.__right_expression_input(other))
 
     def __lt__(self, other: Any) -> Expression:
         """Builds a less-than Expression for this field."""
-        return Expression(self.name, '<', other)
+        return Expression(self.__left_expression_input(), '<', self.__right_expression_input(other))
 
     def __le__(self, other: Any) -> Expression:
         """Builds a less-than-or-equal Expression for this field."""
-        return Expression(self.name, '<=', other)
+        return Expression(self.__left_expression_input(), '<=', self.__right_expression_input(other))
 
     def __gt__(self, other: Any) -> Expression:
         """Builds a greater-than Expression for this field."""
-        return Expression(self.name, '>', other)
+        return Expression(self.__left_expression_input(), '>', self.__right_expression_input(other))
 
     def __ge__(self, other: Any) -> Expression:
         """Builds a greater-than-or-equal Expression for this field."""
-        return Expression(self.name, '>=', other)
+        return Expression(self.__left_expression_input(), '>=', self.__right_expression_input(other))
 
     def like(self, pattern: str) -> Expression:
         """Builds a LIKE Expression for this field."""
-        return Expression(self.name, 'LIKE', pattern)
+        return Expression(self.__left_expression_input(), 'LIKE', pattern)
 
     def in_(self, items: Iterable[Any]) -> Expression:
         """Builds an IN Expression for this field."""
-        return Expression(self.name, 'IN', list(items))
+        return Expression(self.__left_expression_input(), 'IN', list(items))
 
     def not_in(self, items: Iterable[Any]) -> Expression:
         """Builds a NOT IN Expression for this field."""
-        return Expression(self.name, 'NOT IN', list(items))
+        return Expression(self.__left_expression_input(), 'NOT IN', list(items))
 
 
 

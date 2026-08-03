@@ -72,7 +72,7 @@ def test_integer_id_insert():
 def test_integer_id_update_error():
     with DatabaseContextManager(database_name) as db:
         session = db.get_session(User)
-        session = session.update().set(name="Bob")
+        session = session.update().set(User.name=="Bob")
         with pytest.raises(NotFilteredQueryException) as excinfo:
             session.execute()
         assert "UPDATE queries must have at least one filter." in str(excinfo.value)
@@ -96,8 +96,8 @@ def test_integer_id_update():
         session = session.update()
         assert session.options.method == "UPDATE"
 
-        session = session.set(name="Bob")
-        assert session.options.update_set_clauses == ["name"]
+        session = session.set(User.name=="Bob")
+        assert session.options.update_set_clauses == [f"name"]
         assert session.options.parameters == ["Bob"]
 
         session = session.where(User.id == 1)
@@ -105,7 +105,7 @@ def test_integer_id_update():
 
         expression = session.options.filters[0]
         assert expression.operator == "="
-        assert expression.left == "id"
+        assert expression.left == f"{User.__tablename__}.id"
         assert expression.right == 1
         assert session.options.parameters == ["Bob", 1]
 
@@ -241,7 +241,7 @@ def test_uuid_insert():
 def test_uuid_update_error():
     with DatabaseContextManager(database_name) as db:
         session = db.get_session(UserUUID)
-        session = session.update().set(name="Bob")
+        session = session.update().set(User.name=="Bob")
         with pytest.raises(NotFilteredQueryException) as excinfo:
             session.execute()
         assert "UPDATE queries must have at least one filter." in str(excinfo.value)
@@ -265,7 +265,7 @@ def test_uuid_update():
         session = session.update()
         assert session.options.method == "UPDATE"
 
-        session = session.set(name="Bob")
+        session = session.set(User.name=="Bob")
         assert session.options.update_set_clauses == ["name"]
         assert session.options.parameters == ["Bob"]
 
@@ -274,7 +274,7 @@ def test_uuid_update():
 
         expression = session.options.filters[0]
         assert expression.operator == "="
-        assert expression.left == "id"
+        assert expression.left == f"{User.__tablename__}.id"
         assert expression.right == get_user_id()
         assert session.options.parameters == ["Bob", get_user_id()]
 
@@ -539,5 +539,186 @@ def test_order_by_uuid():
 
         assert [user.age for user in users_asc] == [25, 30, 35]
         assert [user.age for user in users_desc] == [35, 30, 25]
+
+    os.remove(database_name)
+
+
+################################################################################
+################################################################################
+############### Teste com Group_by #############################################
+################################################################################
+################################################################################
+
+class UserGroupBy(Model):
+    __tablename__ = 'users_groupby'
+    id = IntegerID()
+    name = String(max_length=100, nullable=False)
+    age = Integer(nullable=False)
+
+
+def test_group_by_count():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserGroupBy)
+        session.create_table().execute()
+
+        session.insert(UserGroupBy(name="Alice", age=22)).execute()
+        session.insert(UserGroupBy(name="Alice", age=30)).execute()
+        session.insert(UserGroupBy(name="Bob", age=25)).execute()
+        session.insert(UserGroupBy(name="Carol", age=40)).execute()
+        session.insert(UserGroupBy(name="Carol", age=35)).execute()
+
+        results = (
+            session
+            .select(UserGroupBy.name.As("name"), Count(UserGroupBy).As("total"))
+            .all()
+            .group_by(UserGroupBy.name)
+            .to_model()
+            .execute()
+        )
+
+        counts = {r.name: r.total for r in results}
+        assert counts == {"Alice": 2, "Bob": 1, "Carol": 2}
+
+
+def test_group_by_max_age():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserGroupBy)
+
+        results = (
+            session
+            .select(UserGroupBy.name.As("name"), Max(UserGroupBy.age).As("max_age"))
+            .all()
+            .group_by(UserGroupBy.name)
+            .to_model()
+            .execute()
+        )
+
+        ages = {r.name: r.max_age for r in results}
+        assert ages == {"Alice": 30, "Bob": 25, "Carol": 40}
+
+
+def test_group_by_with_filter():
+    with DatabaseContextManager(database_name) as db:
+        session = db.get_session(UserGroupBy)
+
+        results = (
+            session
+            .select(UserGroupBy.name.As("name"), Count(UserGroupBy).As("total"))
+            .all()
+            .where(UserGroupBy.age > 24)
+            .group_by(UserGroupBy.name)
+            .to_model()
+            .execute()
+        )
+
+        counts = {r.name: r.total for r in results}
+        assert counts == {"Alice": 1, "Bob": 1, "Carol": 2}
+
+    os.remove(database_name)
+
+
+################################################################################
+################################################################################
+############### Teste com JOIN #################################################
+################################################################################
+################################################################################
+
+from sqlite_orm.field import ForeignKey
+
+
+class Author(Model):
+    __tablename__ = 'authors'
+    id = IntegerID()
+    name = String(max_length=100, nullable=False)
+
+
+class Book(Model):
+    __tablename__ = 'books'
+    id = IntegerID()
+    title = String(max_length=200, nullable=False)
+    author_id = Integer(
+        nullable=False,
+        foreign_key=ForeignKey(reference_model=Author, reference_field=Author.id),
+    )
+
+
+def test_join_select_fields():
+    with DatabaseContextManager(database_name) as db:
+        db.get_session(Author).create_table().execute()
+        db.get_session(Book).create_table().execute()
+
+        session_a = db.get_session(Author)
+        aid1 = session_a.insert(Author(name="Tolkien")).execute()
+        aid2 = session_a.insert(Author(name="Martin")).execute()
+
+        session_b = db.get_session(Book)
+        session_b.insert(Book(title="The Hobbit", author_id=aid1)).execute()
+        session_b.insert(Book(title="LOTR", author_id=aid1)).execute()
+        session_b.insert(Book(title="ASOIAF", author_id=aid2)).execute()
+
+        results = (
+            db.get_session(Author)
+            .select(Author.name.As("author"), Book.title.As("title"))
+            .all()
+            .join(Book)
+            .on(Author.id == Book.author_id)
+            .to_model()
+            .execute()
+        )
+
+        assert len(results) == 3
+        titles = {r.title for r in results}
+        assert titles == {"The Hobbit", "LOTR", "ASOIAF"}
+
+
+def test_join_with_where_filter():
+    with DatabaseContextManager(database_name) as db:
+        results = (
+            db.get_session(Author)
+            .select(Author.name.As("author"), Book.title.As("title"))
+            .all()
+            .join(Book)
+            .on(Author.id == Book.author_id)
+            .where(Author.name == "Tolkien")
+            .to_model()
+            .execute()
+        )
+
+        assert len(results) == 2
+        assert all(r.author == "Tolkien" for r in results)
+
+
+def test_join_with_count_group_by():
+    with DatabaseContextManager(database_name) as db:
+        results = (
+            db.get_session(Author)
+            .select(Author.name.As("author"), Count(Book).As("total"))
+            .all()
+            .join(Book)
+            .on(Author.id == Book.author_id)
+            .group_by(Author.name)
+            .to_model()
+            .execute()
+        )
+
+        counts = {r.author: r.total for r in results}
+        assert counts == {"Tolkien": 2, "Martin": 1}
+
+
+def test_join_with_order_by():
+    with DatabaseContextManager(database_name) as db:
+        results = (
+            db.get_session(Author)
+            .select(Author.name.As("author"), Book.title.As("title"))
+            .all()
+            .join(Book)
+            .on(Author.id == Book.author_id)
+            .order_by(Book.title, ascending=True)
+            .to_model()
+            .execute()
+        )
+
+        titles = [r.title for r in results]
+        assert titles == sorted(titles)
 
     os.remove(database_name)
