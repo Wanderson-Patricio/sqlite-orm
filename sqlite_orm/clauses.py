@@ -1,8 +1,7 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 from dataclasses import dataclass, field
 
 from .query_filter import QueryFilter
-
 
 @dataclass
 class QueryClauses:
@@ -13,12 +12,12 @@ class QueryClauses:
         filters (List[QueryFilter]): A list of filter-like nodes to apply in the
             WHERE clause. Each node must implement generate_clause() and
             get_values() (for example, QueryFilter or Expression).
-        order_by (Optional[str]): The column(s) to order the results by.
+        order_by (Optional[OrderOption]): The column(s) to order the results by.
         limit (Optional[int]): The maximum number of rows to return.
         offset (Optional[int]): The number of rows to skip before starting to return rows.
     """
     filters: List[QueryFilter] = field(default_factory=list)
-    order_by: Optional[str] = None
+    order_by: Optional[Any] = None
     limit: Optional[int] = None
     offset: Optional[int] = None
 
@@ -60,8 +59,10 @@ class ClauseGenerator:
         parts = []
         if clauses.filters:
             parts.append("WHERE " + FilterClauseGenerator.generate(clauses.filters))
+        if clauses.group_by:
+            parts.append(f"GROUP BY {', '.join(clauses.group_by)}")
         if clauses.order_by:
-            parts.append(f"ORDER BY {clauses.order_by}")
+            parts.append(f"ORDER BY {clauses.order_by.field_name} {'ASC' if clauses.order_by.ascending else 'DESC'}")
         if clauses.limit is not None:
             parts.append(f"LIMIT {clauses.limit}")
         if clauses.offset is not None:

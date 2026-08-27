@@ -6,6 +6,7 @@ from .errors import (
 )
 
 from .clauses import ClauseGenerator
+from .join_generator import JoinGenerator
 from .selector import compile_node
 
 NOT_INSERTABLE_FIELDS = {'IntegerID', 'AutoIncrementID'}
@@ -62,13 +63,13 @@ class SelectQueryBuilder(BuilderFactory):
         # Lógica de seleção de colunas
         if options.selected_fields:
             # Usa os campos especificados com as funções (Count, Distinct, etc)
-            attributes = ", ".join(compile_node(f) for f in options.selected_fields)
+            attributes = ", ".join(compile_node(f, with_alias=True) for f in options.selected_fields)
         else:
             # Comportamento padrão (todas as colunas)
             if not options.model_attributes:
                 raise InvalidMethodAssociationException("Model must have at least one attribute to build a SELECT query.")
             attributes = ", ".join([attr.name for attr in options.model_attributes])
-        return f"SELECT {attributes} FROM {self.session.model.__tablename__} {ClauseGenerator.generate(options)};"
+        return f"SELECT {attributes} FROM {self.session.model.__tablename__} {JoinGenerator.generate(options.join_options)} {ClauseGenerator.generate(options)};"
 
 
 class InsertQueryBuilder(BuilderFactory):
@@ -202,7 +203,7 @@ class CreateTableQueryBuilder(BuilderFactory):
             if fk := field.foreign_key:
                 fk_definition = (
                     f"FOREIGN KEY({field_name}) "
-                    f"REFERENCES {fk.reference_table}({fk.reference_field}) "
+                    f"REFERENCES {fk.reference_table_name}({fk.reference_field_name}) "
                     f"ON DELETE {fk.on_delete} "
                     f"ON UPDATE {fk.on_update}"
                 )

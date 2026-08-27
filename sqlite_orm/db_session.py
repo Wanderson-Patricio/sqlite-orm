@@ -1,8 +1,9 @@
 from typing import Any, Optional, List, Callable
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 
 
 from .model import Model
+from .field import Field
 from .query_filter import QueryFilter, AND
 from .expression import Expression
 from .errors import (
@@ -29,6 +30,46 @@ class ModelAttribute:
 
 
 @dataclass
+class OrderOption:
+    """
+    Represents the ordering options for a query.
+
+    Attributes:
+        field (Field): The field name to order by.
+        ascending (bool): Whether to order in ascending
+    """
+    field: InitVar[Field]
+    field_name: str = field(init=False)
+    ascending: bool = True
+
+    def __post_init__(self, field: Field):
+        self.field_name = f"{field.parent_model.__tablename__}.{field.name}" if hasattr(field, 'parent_model') and field.parent_model is not None else str(field)
+
+
+@dataclass
+class JoinOption:
+    """
+    Represents a join option for a query.
+
+    Attributes:
+        join_model (Model): The model to join with.
+        join_field (str): The field in the join model to use for the join condition.
+        base_field (str): The field in the base model to use for the join condition.
+        join_type (str): The type of join (e.g., INNER, LEFT, RIGHT).
+    """
+    models: List[Model] = field(default_factory=list)
+    expression: Optional[Expression] = None
+    types: List[str] = field(default_factory=list)
+
+    @staticmethod
+    def verify_join_type(join_type: str):
+        """Verifies if the provided join type is valid."""
+        valid_types = ["INNER", "LEFT", "RIGHT", "FULL"]
+        if join_type not in valid_types:
+            raise ValueError(f"Invalid join type '{join_type}'. Valid types are: {', '.join(valid_types)}.")
+
+
+@dataclass
 class SessionOptions:
     """
     Represents the configuration options for a database session.
@@ -47,6 +88,7 @@ class SessionOptions:
         to_model (Optional[bool]): Whether to map results to model instances.
         update_set_clauses (List[str]): Fields to update in an UPDATE query.
         debug (Optional[bool]): Whether to enable debug mode.
+        inserted_model (Optional[Model]): The model instance that was inserted, if applicable.
 
     Methods:
         reset():
@@ -56,7 +98,8 @@ class SessionOptions:
     model_attributes: List[ModelAttribute] = field(default_factory=list)
     selected_fields: List[Any] = field(default_factory=list)
     filters: List[Any] = field(default_factory=list)
-    order_by: Optional[str] = None
+    order_by: Optional[OrderOption] = None
+    group_by: Optional[List[str]] = field(default_factory=list)
     limit: Optional[int] = None
     offset: Optional[int] = None
     method: Optional[str] = None
@@ -65,10 +108,13 @@ class SessionOptions:
     to_model: Optional[bool] = False
     update_set_clauses: List[str] = field(default_factory=list)
     debug: Optional[bool] = None
+    inserted_model: Optional[Model] = None
+    join_options: Optional[JoinOption] = None
 
     def reset(self):
         self.filters = []
         self.order_by = None
+        self.group_by = []
         self.limit = None
         self.offset = None
         self.method = None
@@ -77,6 +123,8 @@ class SessionOptions:
         self.to_model = False
         self.update_set_clauses = []
         self.selected_fields = []
+        self.inserted_model = None
+        self.join_options = []
 
 
 class Helpers:
@@ -174,6 +222,7 @@ class DBSession:
             debug=False
         )
 
+
     @property
     def attributes(self) -> List[str]:
         """Returns a list of attribute names for the model associated with the session."""
@@ -181,26 +230,31 @@ class DBSession:
             attr.name for attr in self.options.model_attributes
             if attr.type not in NOT_INSERTABLE_FIELDS
         ]
+    
 
     def debug(self, enable: bool = True, in_place: bool = False):
         """Enables or disables debug mode for the session, which logs executed SQL queries with parameters."""
         self.options.debug = enable
         if not in_place:
             return self
+        
 
     def reset_options(self):
         """Resets the session's options to their default state after query execution to prevent state leakage between queries."""
         self.options.reset()
+
 
     def create_table(self):
         """Sets the session's method to CREATE_TABLE for building a CREATE TABLE query."""
         self.options.method = "CREATE_TABLE"
         return self
     
+    
     def drop_table(self):
         """Sets the session's method to DROP_TABLE for building a DROP TABLE query."""
         self.options.method = "DROP_TABLE"
         return self
+    
 
     def select(self, *fields: Any):
         """Sets the session's method to SELECT for building a SELECT query."""
@@ -208,39 +262,51 @@ class DBSession:
         if fields:
             self.options.selected_fields = list(fields)
         return self
+    
 
     def insert(self, model_instance: Model):
         """Sets the session's method to INSERT for building an INSERT query and prepares the parameters."""
         self.options.method = "INSERT"
-
-        
+        self.options.inserted_model = model_instance
 
         self.options.parameters = [
             getattr(model_instance, attr)
             for attr in self.attributes
         ]
         return self
+    
 
     def delete(self):
         """Sets the session's method to DELETE for building a DELETE query."""
         self.options.method = "DELETE"
         return self
+    
 
     def update(self):
         """Sets the session's method to UPDATE for building an UPDATE query."""
         self.options.method = "UPDATE"
         return self
     
+    
     @Helpers.only("UPDATE")
-    def set(self, **kwargs):
+    def set(self, *args: Expression):
         """Sets the fields and values for an UPDATE query. Must be called before .where() for UPDATE queries."""
-        if kwargs:
-            for key, value in kwargs.items():
-                if key not in self.attributes:
-                    raise AttributeError(f"Attribute '{key}' is not valid for model '{self.model.__name__}'")
-                self.options.parameters.append(value)
-                self.options.update_set_clauses.append(key)
+        if not args:
+            return self  # No arguments provided, do nothing
+
+        if not all(isinstance(arg, Expression) for arg in args):
+            raise TypeError("All arguments to .set() must be Expression instances.")
+        
+        for arg in args:
+            key = arg.left
+            value = arg.right
+            self.options.parameters.append(value)
+            # Strip table qualifier (e.g. "users.name" → "name"); SQLite rejects table.column in SET
+            column = key.split(".")[-1] if isinstance(key, str) and "." in key else key
+            self.options.update_set_clauses.append(column)
+            
         return self
+    
 
     def where(self, *filters: Any, **kwargs):
         """Adds filter nodes to the query.
@@ -283,13 +349,29 @@ class DBSession:
 
         return self
 
+
     @Helpers.only("SELECT")
-    def order_by(self, field_name: str):
+    def order_by(self, field: Any, ascending: bool = True):
         """Sets the ORDER BY clause for a SELECT query."""
-        if field_name not in self.model._fields:
-            raise AttributeError(f"Attribute '{field_name}' is not valid for model '{self.model.__name__}'")
-        self.options.order_by = field_name
+        # field_name = field.name if hasattr(field, 'name') else str(field)
+        # if field_name not in self.model._fields:
+        #     raise AttributeError(f"Attribute '{field_name}' is not valid for model '{self.model.__name__}'")
+        self.options.order_by = OrderOption(field=field, ascending=ascending)
         return self
+
+
+    @Helpers.only("SELECT")
+    def group_by(self, *fields: Field):
+        """Sets the GROUP BY clause for a SELECT query."""
+        group_by_fields = []
+        for field in fields:
+            if hasattr(field, 'parent_model') and field.parent_model is not None:
+                group_by_fields.append(f"{field.parent_model.__tablename__}.{field.name}")
+            else:
+                group_by_fields.append(field.name if hasattr(field, 'name') else str(field))
+        self.options.group_by = group_by_fields
+        return self
+
 
     @Helpers.only("SELECT")
     def limit(self, limit: int):
@@ -299,6 +381,7 @@ class DBSession:
         self.options.limit = limit
         return self
 
+
     @Helpers.only("SELECT")
     def offset(self, offset: int):
         """Sets the OFFSET clause for a SELECT query."""
@@ -307,11 +390,13 @@ class DBSession:
         self.options.offset = offset
         return self
     
+
     @Helpers.only("SELECT")
     def all(self):
         """Indicates that all results should be returned for a SELECT query."""
         self.options.get_all = True
         return self
+
 
     @Helpers.only("SELECT")
     def first(self):
@@ -319,12 +404,45 @@ class DBSession:
         self.options.get_all = False
         self.options.limit = 1
         return self
+    
+    
+    @Helpers.only("SELECT")
+    def join(self, related_model: Model, type: str = "INNER"):
+        if not self.options.selected_fields:
+            raise ValueError("You must call .select() with specified fields before specifying a JOIN.")
+        if not self.options.join_options:
+            self.options.join_options = JoinOption()
+        self.options.join_options.models.append(related_model)
+
+        JoinOption.verify_join_type(type.upper())
+        self.options.join_options.types.append(type.upper())
+        return self
+    
+
+    @Helpers.only("SELECT")
+    def on(self, expression: Expression):
+        if not self.options.join_options:
+            raise ValueError("You must call .join() before specifying the ON condition.")
+        self.options.join_options.expression = expression
+        return self
+
+
 
     @Helpers.only("SELECT")
     def to_model(self):
         """Indicates that the results of a SELECT query should be mapped to model instances."""
+        from .selector import Alias
+
+        for field in self.options.selected_fields:
+            if not isinstance(field, Alias):
+                raise ValueError(f"Field '{field}' is not associated with a alias.")
+
+            # if not hasattr(field.element, 'parent_model') or field.element.parent_model != self.model:
+            #     raise ValueError(f"Field '{field}' is not associated with the model '{self.model.__name__}'.")
+            
         self.options.to_model = True
         return self
+
 
     def execute(self):
         """Builds the SQL query using the query builder, executes it,

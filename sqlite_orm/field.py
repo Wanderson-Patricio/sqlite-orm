@@ -6,10 +6,43 @@ from .expression import Expression
 
 @dataclass(frozen=True)
 class ForeignKey:
-    reference_table: str
-    reference_field: str
+    reference_model: Any
+    reference_field: Any
     on_delete: str = "CASCADE"
     on_update: str = "SET NULL"
+
+    def __post_init__(self):
+        from .model import Model
+
+        table = self.reference_model
+        if isinstance(table, type) and issubclass(table, Model):
+            return
+
+        if not isinstance(table, Model):
+            raise TypeError(
+                "ForeignKey.reference_table must be a Model class or an instance of a Model class "
+                "(got {type(table).__name__})"
+            )
+        
+
+    @property
+    def reference_table_name(self):
+        from .model import Model
+
+        model = self.reference_model
+        if isinstance(model, type) and issubclass(model, Model):
+            return model.__tablename__
+
+        return model.__class__.__tablename__  # Retorna o nome da classe do modelo se for uma instância
+
+
+    @property
+    def reference_field_name(self):
+        field = self.reference_field
+        if hasattr(field, "name"):
+            return field.name
+        return str(field)  # Retorna o nome do campo se for uma instância de Field, caso contrário, converte para string
+
 
 class Field(ABC):
     """
@@ -37,8 +70,20 @@ class Field(ABC):
         self.unique = unique
         self.default = default
 
+        self.parent_model = None  # This will be set when the field is added to a model class
+
     def __str__(self):
-        return f"<Field name={self.name} type={self.__type} primary_key={self.primary_key} nullable={self.nullable} unique={self.unique} foreign_key={self.foreign_key}>"
+        return ("<Field "
+                f"name={self.name} "
+                f"type={self.__type} "
+                f"primary_key={self.primary_key} "
+                f"nullable={self.nullable} "
+                f"unique={self.unique} "
+                f"foreign_key={self.foreign_key}> "
+                f"default={self.default}> "
+                f"parent_model={self.parent_model.__name__ if self.parent_model else '-'}"
+                ">"
+            )
 
     def __repr__(self):
         return str(self)
@@ -69,42 +114,60 @@ class Field(ABC):
                     raise ValueError(f"Field '{self.name}' cannot be None")
         
         return value
+
+    def __left_expression_input(self) -> str:
+        """Returns the SQL representation of this field for use in expressions."""
+        if self.parent_model is None:
+            raise ValueError(f"Field '{self.name}' is not associated with any model.")
+        return f"{self.parent_model.__tablename__}.{self.name}"
+
+    def __right_expression_input(self, value: Any) -> str:
+        """Returns the SQL representation of a value for use in expressions."""
+        if isinstance(value, Field):
+            if value.parent_model is None:
+                raise ValueError(f"Field '{value.name}' is not associated with any model.")
+            return f"{value.parent_model.__tablename__}.{value.name}"
+        return value  # Use parameterized queries for values
+
+    def As(self, alias: str) -> 'Any':
+        from .selector import Alias
+        return Alias(self, alias)
     
     def __eq__(self, other: Any) -> Expression:
         """Builds an equality Expression for this field."""
-        return Expression(self.name, '=', other)
+        return Expression(self.__left_expression_input(), '=', self.__right_expression_input(other))
 
     def __ne__(self, other: Any) -> Expression:
         """Builds an inequality Expression for this field."""
-        return Expression(self.name, '!=', other)
+        return Expression(self.__left_expression_input(), '!=', self.__right_expression_input(other))
 
     def __lt__(self, other: Any) -> Expression:
         """Builds a less-than Expression for this field."""
-        return Expression(self.name, '<', other)
+        return Expression(self.__left_expression_input(), '<', self.__right_expression_input(other))
 
     def __le__(self, other: Any) -> Expression:
         """Builds a less-than-or-equal Expression for this field."""
-        return Expression(self.name, '<=', other)
+        return Expression(self.__left_expression_input(), '<=', self.__right_expression_input(other))
 
     def __gt__(self, other: Any) -> Expression:
         """Builds a greater-than Expression for this field."""
-        return Expression(self.name, '>', other)
+        return Expression(self.__left_expression_input(), '>', self.__right_expression_input(other))
 
     def __ge__(self, other: Any) -> Expression:
         """Builds a greater-than-or-equal Expression for this field."""
-        return Expression(self.name, '>=', other)
+        return Expression(self.__left_expression_input(), '>=', self.__right_expression_input(other))
 
     def like(self, pattern: str) -> Expression:
         """Builds a LIKE Expression for this field."""
-        return Expression(self.name, 'LIKE', pattern)
+        return Expression(self.__left_expression_input(), 'LIKE', pattern)
 
     def in_(self, items: Iterable[Any]) -> Expression:
         """Builds an IN Expression for this field."""
-        return Expression(self.name, 'IN', list(items))
+        return Expression(self.__left_expression_input(), 'IN', list(items))
 
     def not_in(self, items: Iterable[Any]) -> Expression:
         """Builds a NOT IN Expression for this field."""
-        return Expression(self.name, 'NOT IN', list(items))
+        return Expression(self.__left_expression_input(), 'NOT IN', list(items))
 
 
 
@@ -186,7 +249,7 @@ class IntegerID(Integer):
 
 class UUID(String):
     def __init__(self, primary_key: bool = True, unique: bool = True, **kwargs):
-        super().__init__(primary_key=primary_key, unique=unique, **kwargs)
+        super().__init__(max_length= 36, primary_key=primary_key, unique=unique, **kwargs)
 
 
     def validate_uuid_format(self, value: str) -> bool:
@@ -219,7 +282,11 @@ class Boolean(Field):
     def __validate__(self, value):
         value = super().__validate__(value)
         if value is not None and not isinstance(value, bool):
-            raise ValueError(f"Expected a boolean for field '{self.name}', got {type(value).__name__}")
+            try:
+                value = bool(value)
+            except:
+                raise ValueError(f"Expected a boolean for field '{self.name}', got {type(value).__name__}")
+        return value
 
 
 class Float(Field):
@@ -230,6 +297,7 @@ class Float(Field):
         value = super().__validate__(value)
         if value is not None and not isinstance(value, (int, float)):
             raise ValueError(f"Expected a number for field '{self.name}', got {type(value).__name__}")
+        return value
 
 class Text(Field):
     def __init__(self, *args, **kwargs):
@@ -239,6 +307,7 @@ class Text(Field):
         value = super().__validate__(value)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"Expected a string for field '{self.name}', got {type(value).__name__}")
+        return value
 
 
 class Blob(Field):
@@ -249,6 +318,7 @@ class Blob(Field):
         value = super().__validate__(value)
         if value is not None and not isinstance(value, (bytes, bytearray)):
             raise ValueError(f"Expected bytes for field '{self.name}', got {type(value).__name__}")
+        return value
 
 
 class DateTime(Field):

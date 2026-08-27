@@ -97,7 +97,7 @@ pip install python-sqlite3-orm
          raise NotImplementedError()
    ```
 
-   > [!INFO]
+   > :information_source: ***Observação***
    > Para a criação de novos campos, é obrigatório a implementação de um validador, que indica se o valor fornecido na criação do modelo é válido.
 
 2. **Definição do Modelo**:
@@ -106,7 +106,7 @@ pip install python-sqlite3-orm
 
    ```python
    from sqlite_orm.model import Model
-   from sqlite_orm.field import ID, Integer, String
+   from sqlite_orm.field import IntegerID, Integer, String
 
    class User(Model):
       __tablename__ = "Users"
@@ -117,29 +117,59 @@ pip install python-sqlite3-orm
       idade = Integer()
    ```
 
+   Para referenciar outro modelo, utilize o parâmetro `foreign_key` em qualquer campo, passando uma instância de `ForeignKey` com o modelo e o campo referenciados.
+
+   ```python
+   from sqlite_orm.model import Model
+   from sqlite_orm.field import IntegerID, Integer, String, ForeignKey
+
+   class User(Model):
+      __tablename__ = "Users"
+
+      id = IntegerID()
+      name = String(max_length=100, nullable=False)
+
+   class Contact(Model):
+      __tablename__ = "Contacts"
+
+      id = IntegerID()
+      user_id = Integer(
+          nullable=False,
+          foreign_key=ForeignKey(
+              reference_model=User,
+              reference_field=User.id,
+              on_delete="CASCADE",   # opcional, padrão: "CASCADE"
+              on_update="SET NULL",  # opcional, padrão: "SET NULL"
+          ),
+      )
+      type = String(nullable=False)
+      value = String(nullable=False)
+   ```
+
    - Para criar uma nova instância de um modelo, basta seguir o processo de criação de um **dataclass**.
 
    ```python
    user = User(id=1, nome='Fulano da Silva', cpf='12345678900', idade =20)
+   contact = Contact(id=1, user_id=1)
    ```
 
 3. **Criação da Sessão**:
    - Uma instância de `DatabaseContextManager` é usada para gerenciar a conexão com o banco de dados.
 
    ```python
-   from sqlite_orm.database_manager import DatabaseContextManager, DBSession
+   from sqlite_orm.database_manager import DatabaseContextManager
 
    with DatabaseContextManager("example.db") as db:
        session = db.get_session(User)
    ```
 
-   caso o desenvolvedor deseje que sejam exibidas as queries que estão sendo executadas, basta usar o método **debug** com o parâmetro ***enable*** definida como ***True***.
+   caso o desenvolvedor deseje que sejam exibidas as queries que estão sendo executadas, basta usar o método **debug**. O parâmetro ***enable*** é definido como padrão ***True***.
 
    ```python
-   from sqlite_orm.database_manager import DatabaseContextManager, DBSession
+   from sqlite_orm.database_manager import DatabaseContextManager
 
    with DatabaseContextManager("example.db") as db:
-       session = db.get_session(User).debug(enable=True)
+       session = db.get_session(User).debug()
 
    # Ou
 
@@ -172,15 +202,15 @@ pip install python-sqlite3-orm
    session = session.select().first()
    ```
 
-   Poder ser escolhido pelo usuário se o retorno da função será dado em uma tupla ou como uma instância do modelo criado anteriormente, através do método **to_model()**.
+   Poder ser escolhido pelo usuário se o retorno da função será dado em um dicionário ou como uma instância do modelo criado anteriormente, através do método **to_model()**.
 
    **Exemplos de retorno:**
    ```python
    session = session.select().all()
-   # [(1, 'Fulando da Silva', '12345678900', 20)]
+   # [{'id': 1, 'nome':'Fulando da Silva', 'cpf':'12345678900', 'idade':20}]
    
    session = session.select().first()
-   # (1, 'Fulando da Silva', '12345678900', 20)
+   # {'id': 1, 'nome':'Fulando da Silva', 'cpf':'12345678900', 'idade':20}
    
    session = session.select().all().to_model()
    # [<User (id=1, nome='Fulando da Silva', cpf='12345678900', idade=20)>]
@@ -269,6 +299,223 @@ pip install python-sqlite3-orm
     > Para novos projetos e novas consultas, prefira Expressions.
     > QueryFilter, AND e OR continuam disponíveis para compatibilidade com código legado.
 
+4. **GROUP BY**
+   É possível utilizar agrupamento nas queries também.
+
+    ```python
+    users = (
+         session
+         .select()
+         .all()
+         .group_by(User.name)
+         .where(User.age >= 18)
+         .to_model()
+         .execute()
+    )
+    ```
+
+5. **ORDER BY**
+   É possível utilizar ordenação. O parâmetro ***ascending*** é definido por default como ***True***.
+
+    ```python
+    users = (
+         session
+         .select()
+         .all()
+         .order_by(User.age, ascending=True)
+         .where(User.age >= 18)
+         .to_model()
+         .execute()
+    )
+    ```
+
+
+6. **Utilização de selectors**
+   Caso o usuário deseje buscar apenas alguns dos campos (e não todos), é possível declarar quais campos serão selecionados.
+
+   ```python
+   results = session.select(User.name).all().execute()
+   print(results)
+
+   # Resultado no terminal: [{'User.name': 'Fulano da Silva'}]
+   ```
+
+   Para que seja retornada uma instância de um modelo e preciso utilizar um ***Alias*** para o nome do campo com o método ***As***.
+
+   ```python
+   results = session.select(User.name.As("Nome do usuario")).first().execute()
+   print(results.nome_do_usuario)
+
+   # Resultado no terminal: Fulano da Silva
+   ```
+
+   Entre os selectors também podemos utilizar alguns selectors predefinidos no módulo ***.selector***, sendo eles:
+
+      - ***Count***: Conta quantos registros existem. Pode receber um campo específico ou a classe do modelo (equivalente a `COUNT(*)`).
+      ```python
+      from sqlite_orm.selector import Count
+
+      result = session.select(Count(User).As("total")).first().to_model().execute()
+      print(result.total)  # ex: 5
+      ```
+
+      - ***Distinct***: Retorna valores únicos de um campo.
+      ```python
+      from sqlite_orm.selector import Distinct
+
+      results = session.select(Distinct(User.name).As("nomes_unicos")).all().to_model().execute()
+      nomes = {r.nomes_unicos for r in results}
+      ```
+
+      - ***Max***: Retorna o maior valor de um campo numérico.
+      ```python
+      from sqlite_orm.selector import Max
+
+      result = session.select(Max(User.age).As("maior_idade")).first().to_model().execute()
+      print(result.maior_idade)  # ex: 65
+      ```
+
+      - ***Min***: Retorna o menor valor de um campo numérico.
+      ```python
+      from sqlite_orm.selector import Min
+
+      result = session.select(Min(User.age).As("menor_idade")).first().to_model().execute()
+      print(result.menor_idade)  # ex: 18
+      ```
+
+      - ***Sum***: Retorna a soma dos valores de um campo numérico.
+      ```python
+      from sqlite_orm.selector import Sum
+
+      result = session.select(Sum(User.age).As("soma_idades")).first().to_model().execute()
+      print(result.soma_idades)  # ex: 320
+      ```
+
+      - ***Mean***: Retorna a média dos valores de um campo numérico (usa `AVG` internamente).
+      ```python
+      from sqlite_orm.selector import Mean
+
+      result = session.select(Mean(User.age).As("media_idade")).first().to_model().execute()
+      print(result.media_idade)  # ex: 32.5
+      ```
+
+      - ***Concat***: Concatena o valor de múltiplos campos em uma única coluna.
+      ```python
+      from sqlite_orm.selector import Concat
+
+      result = session.select(Concat(User.name, User.cpf).As("nome_cpf")).all().to_model().execute()
+      print(result[0].nome_cpf)  # ex: Fulano da Silva12345678900
+      ```
+
+      - ***Selector personalizado***: É possível criar seu próprio selector herdando de `Selector` e implementando o método `compile`, que deve retornar a expressão SQL correspondente.
+      ```python
+      from sqlite_orm.selector import Selector
+
+      class Coalesce(Selector):
+          def __init__(self, field, fallback):
+              self.field = field
+              self.fallback = fallback
+
+          def compile(self) -> str:
+              col = f"{self.field.parent_model.__tablename__}.{self.field.name}"
+              return f"COALESCE({col}, '{self.fallback}')"
+
+      result = session.select(Coalesce(User.name, "Anônimo").As("nome")).all().to_model().execute()
+      print(result[0].nome)  # ex: Anônimo (quando name for NULL)
+      ```
+
+7. **Queries Join**
+
+   Para realizar um JOIN entre duas tabelas, é preciso utilizar os métodos `.join()` e `.on()`. O `.join()` recebe o modelo relacionado e o `.on()` recebe a condição de junção como uma Expression.
+
+   > [!IMPORTANT]
+   > Ao utilizar JOIN, o `.select()` deve receber explicitamente os campos desejados com `.As()`, pois o retorno envolve colunas de múltiplas tabelas.
+
+   **Configuração do modelo com chave estrangeira:**
+   ```python
+   from sqlite_orm import Model, DatabaseContextManager
+   from sqlite_orm.field import IntegerID, Integer, String, ForeignKey
+
+   class Author(Model):
+       __tablename__ = "authors"
+       id = IntegerID()
+       name = String(max_length=100, nullable=False)
+
+   class Book(Model):
+       __tablename__ = "books"
+       id = IntegerID()
+       title = String(max_length=200, nullable=False)
+       author_id = Integer(
+           nullable=False,
+           foreign_key=ForeignKey(reference_model=Author, reference_field=Author.id),
+       )
+   ```
+
+   **JOIN simples:**
+   ```python
+   with DatabaseContextManager("library.db") as db:
+       results = (
+           db.get_session(Author)
+           .select(Author.name.As("author"), Book.title.As("title"))
+           .all()
+           .join(Book)
+           .on(Author.id == Book.author_id)
+           .to_model()
+           .execute()
+       )
+
+       for r in results:
+           print(r.author, r.title)
+   ```
+
+   **JOIN com filtro:**
+   ```python
+   results = (
+       db.get_session(Author)
+       .select(Author.name.As("author"), Book.title.As("title"))
+       .all()
+       .join(Book)
+       .on(Author.id == Book.author_id)
+       .where(Author.name == "Tolkien")
+       .to_model()
+       .execute()
+   )
+   ```
+
+   **JOIN com agrupamento e contagem:**
+   ```python
+   from sqlite_orm.selector import Count
+
+   results = (
+       db.get_session(Author)
+       .select(Author.name.As("author"), Count(Book).As("total_livros"))
+       .all()
+       .join(Book)
+       .on(Author.id == Book.author_id)
+       .group_by(Author.name)
+       .to_model()
+       .execute()
+   )
+
+   for r in results:
+       print(f"{r.author}: {r.total_livros} livro(s)")
+   ```
+
+   **JOIN com ordenação:**
+   ```python
+   results = (
+       db.get_session(Author)
+       .select(Author.name.As("author"), Book.title.As("title"))
+       .all()
+       .join(Book)
+       .on(Author.id == Book.author_id)
+       .order_by(Book.title, ascending=True)
+       .to_model()
+       .execute()
+   )
+   ```
+
+
 ## Exemplos de Código
 
 ### Criação de Tabelas
@@ -343,7 +590,7 @@ with DatabaseContextManager("store.db") as db:
 with DatabaseContextManager("store.db") as db:
     session = db.get_session(Product)
     session.update() \
-    .set(name = "Gaming Laptop") \
+    .set(User.name == "Gaming Laptop") \
     .where(Product.id == 1) \
     .execute()
 ```

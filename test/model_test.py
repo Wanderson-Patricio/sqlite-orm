@@ -21,7 +21,7 @@ def test_create_user():
     assert user.age == 30
     assert isinstance(user.age, int)
     
-    assert repr(user) == "<User (id: 1, name: Alice, age: 30)>"
+    assert repr(user) == "<User (id: 1, name: 'Alice', age: 30)>"
 
     with pytest.raises(AttributeError) as exc_info:
         user.field
