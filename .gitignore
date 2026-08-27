@@ -224,3 +224,4 @@ __marimo__/
 
 # Test files
 __main__.py
+__run_tests__.py
